@@ -1,61 +1,34 @@
-import "./globals.css";
-import "react-toastify/dist/ReactToastify.css";
-
 import type { Metadata } from "next";
-import localFont from "next/font/local";
-import React from "react";
+import { headers } from "next/headers";
+import "@fontsource/be-vietnam-pro/latin-400.css";
+import "@fontsource/be-vietnam-pro/latin-600.css";
+import "@fontsource/be-vietnam-pro/vietnamese-400.css";
+import "@fontsource/be-vietnam-pro/vietnamese-600.css";
+import "@fontsource/noto-serif/latin-500.css";
+import "@fontsource/noto-serif/latin-600.css";
+import "@fontsource/noto-serif/vietnamese-500.css";
+import "@fontsource/noto-serif/vietnamese-600.css";
+import "./globals.css";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
-import { ToastManager } from "@/components/ToastManager/ToastManager";
-import { SocketProvider } from "@/context/SoundContext/SoundProvider";
-import StoreProvider from "@/context/StoreProvider/StoreProvider";
-import { ThemeProvider } from "@/context/ThemeProvider/ThemeProvider";
-
-const ggSans = localFont({
-  src: [
-    {
-      path: "../../public/fonts/gg-sans/gg_sans_Bold.woff",
-      weight: "700",
-      style: "bold",
-    },
-    {
-      path: "../../public/fonts/gg-sans/gg_sans_Medium.woff",
-      weight: "500",
-      style: "medium",
-    },
-    {
-      path: "../../public/fonts/gg-sans/gg_sans_Regular.woff",
-      weight: "400",
-      style: "regular",
-    },
-    {
-      path: "../../public/fonts/gg-sans/gg_sans_Semibold.woff",
-      weight: "600",
-      style: "semibold",
-    },
-  ],
-});
 export const metadata: Metadata = {
-  title: "Link Wave Chat",
-  description: "Chat with your friends in a new way.",
+    title: "SGU Chat",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en" className="no-scrollbar" suppressHydrationWarning>
-      <body className={`${ggSans.className} bg-white h-screen dark:bg-dark-400 dark:text-white`}>
-        <StoreProvider>
-          <SocketProvider>
-            <ThemeProvider>
-              <ToastManager />
-              {children}
-            </ThemeProvider>
-          </SocketProvider>
-        </StoreProvider>
-      </body>
-    </html>
-  );
+// Fonts are bundled by Next and served from our own origin (no Google Fonts at runtime).
+// Each family needs both the latin and vietnamese subsets: the vietnamese subset
+// covers only diacritics, so basic Latin letters would otherwise fall back to a system font.
+export default async function RootLayout({
+                                             children,
+                                         }: Readonly<{ children: React.ReactNode }>) {
+    // Nonce do middleware tạo, dùng cho script của next-themes.
+    const nonce = (await headers()).get("x-nonce") ?? undefined;
+
+    return (
+        <html lang="vi" suppressHydrationWarning>
+        <body className="antialiased">
+        <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
+        </body>
+        </html>
+    );
 }

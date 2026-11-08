@@ -1,15 +1,5 @@
-import React from "react";
-
-import { Chat } from "@/components/Chat/Chat";
-import { Container } from "@/components/Container/Container";
-import { SocketProvider } from "@/context/SocketContext/SocketProvider/SocketProvider";
+import { ChatShell } from "@/components/chat/ChatShell";
 
 export default function ChatPage() {
-  return (
-    <Container className="p-0" showHeader={false}>
-      <SocketProvider>
-        <Chat />
-      </SocketProvider>
-    </Container>
-  );
+    return <ChatShell />;
 }

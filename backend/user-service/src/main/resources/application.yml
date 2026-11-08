@@ -2,6 +2,9 @@ server:
   port: 8082
 
 eureka:
+  instance:
+    prefer-ip-address: true
+    ip-address: 127.0.0.1
   client:
     service-url:
       defaultZone: 'http://localhost:8761/eureka/'
@@ -39,4 +42,4 @@ spring:
         physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
 
 files:
-  storage-folder: 'D:\Files\storage'
+  storage-folder: '${FILE_STORAGE_FOLDER:./storage}'

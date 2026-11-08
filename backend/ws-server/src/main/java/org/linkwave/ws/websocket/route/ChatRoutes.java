@@ -1,6 +1,6 @@
 package org.linkwave.ws.websocket.route;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -74,6 +74,7 @@ public class ChatRoutes {
                 .id(messageId)
                 .chatId(id)
                 .senderId(userId)
+                .senderName(messageDto.getAuthor() == null ? null : messageDto.getAuthor().getName())
                 .text(message.text())
                 .timestamp(messageDto.getCreatedAt())
                 .build());
@@ -248,7 +249,7 @@ public class ChatRoutes {
         log.debug("-> addChat(): chatId={}, userId={}", id, userId);
 
         if (chatRepository.isMember(id, userId) &&
-            chatRepository.isMember(id, recipientId)) {
+                chatRepository.isMember(id, recipientId)) {
             return ok();
         }
 

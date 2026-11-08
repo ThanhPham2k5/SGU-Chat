@@ -1,36 +1,116 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+/* next-themes toggles the "dark" class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Bảng màu lấy từ logo SGU: navy #125582 cho chữ và hành động chính,
+ * xanh nhạt #75c7ef cho điểm nhấn, nền trắng xám rất nhạt.
+ * Components chỉ dùng token (bg-paper, text-ink, ...), không dùng mã hex trực tiếp.
+ */
 :root {
-    --primaryColor: #ffffff;
-    --secondaryColor: #000000;
-    --foreground-rgb: 0, 0, 0;
-    --background-start-rgb: 214, 219, 220;
-    --background-end-rgb: 255, 255, 255;
+    --paper: #f5f8fa;
+    --surface: #ffffff;
+    --ink: #0d2538;
+    --muted: #4a6074;
+    --line: #d4e1ea;
+    --primary: #125582;
+    --primary-hover: #0c4066;
+    --primary-ink: #ffffff;
+    --sky: #75c7ef;
+    --tint: #e9f5fc;
+    --danger: #b42318;
+    color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --foreground-rgb: 255, 255, 255;
-        --background-start-rgb: 0, 0, 0;
-        --background-end-rgb: 0, 0, 0;
+.dark {
+    --paper: #0a1a27;
+    --surface: #10263a;
+    --ink: #e8f1f8;
+    --muted: #9ab3c7;
+    --line: #22405a;
+    --primary: #75c7ef;
+    --primary-hover: #a6d9f5;
+    --primary-ink: #0a1a27;
+    --sky: #1d4c6e;
+    --tint: #17354d;
+    --danger: #f97066;
+    color-scheme: dark;
+}
+
+@theme inline {
+    --color-paper: var(--paper);
+    --color-surface: var(--surface);
+    --color-ink: var(--ink);
+    --color-muted: var(--muted);
+    --color-line: var(--line);
+    --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-ink: var(--primary-ink);
+    --color-sky: var(--sky);
+    --color-tint: var(--tint);
+    --color-danger: var(--danger);
+    --color-success: #2e7d5b;
+
+    --font-sans: "Be Vietnam Pro", system-ui, sans-serif;
+    --font-serif: "Noto Serif", Georgia, serif;
+}
+
+@layer base {
+    html {
+        background: var(--paper);
+        color: var(--ink);
+        scrollbar-color: var(--line) transparent;
+    }
+
+    body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    /* Các phần trình duyệt tự vẽ cũng phải theo bảng màu */
+    ::selection {
+        background: var(--sky);
+        color: var(--ink);
+    }
+
+    input,
+    textarea {
+        caret-color: var(--primary);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: var(--muted);
+        opacity: 1;
+    }
+
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 999px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--muted);
+        background-clip: content-box;
     }
 }
-
-@layer utilities {
-    .no-scrollbar::-webkit-scrollbar {
-        display: none;
-    }
-
-    .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-    }
-}
-
-body {
-    background-color: var(--primaryColor);
-    color: var(--secondaryColor);
-}
-

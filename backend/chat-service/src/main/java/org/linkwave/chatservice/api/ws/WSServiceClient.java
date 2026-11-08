@@ -20,11 +20,28 @@ public interface WSServiceClient {
             @PathVariable String chatId
     );
 
-    @PatchMapping("/{id}/unread_messages")
+    @PostMapping("/{id}/unread_messages")
     void addUnreadMessage(
             @RequestHeader(AUTHORIZATION) String authHeader,
             @PathVariable String id,
             @RequestParam Long senderId
+    );
+
+
+    @PostMapping("/{chatId}/membership")
+    void notifyMembership(
+            @RequestHeader(AUTHORIZATION) String authHeader,
+            @PathVariable String chatId,
+            @RequestBody MembershipNotification notification
+    );
+
+    // action: JOIN | LEAVE | KICK | SET_ROLE
+    record MembershipNotification(String action, Long memberId, Long initiatorId) {}
+
+    @PostMapping("/invitations")
+    void notifyInvitation(
+            @RequestHeader(AUTHORIZATION) String authHeader,
+            @RequestBody InvitationNotification notification
     );
 
 }

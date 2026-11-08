@@ -267,10 +267,7 @@ public class ChatServiceImpl implements ChatService {
 
         selectedChats.forEach(chat -> {
             final MessageDto lastMessage = chat.getLastMessage();
-            if (lastMessage == null) {
-                return;
-            }
-            final MessageAuthorDto author = lastMessage.getAuthor();
+            final MessageAuthorDto author = lastMessage == null ? null : lastMessage.getAuthor();
 
             if (chat instanceof DuoChatDto duoChat) {
                 final Long companionId = duoChat.getUser().getId();
@@ -280,7 +277,7 @@ public class ChatServiceImpl implements ChatService {
                     duoChat.setAvatarAvailable(user.getAvatarPath() != null);
                     duoChat.setUser(modelMapper.map(user, CompanionDto.class));
                 }
-            } else { // add author details for group chats only
+            } else if (author != null) { // add author details for group chats only
                 final UserDto user = usersMap.get(author.getId());
                 author.setUsername(user.getUsername());
                 author.setName(user.getName());
@@ -409,6 +406,55 @@ public class ChatServiceImpl implements ChatService {
                 .stream()
                 .filter(_chat -> _chat.getId().equals(userId))
                 .findAny();
+    }
+
+    @Override
+    public ChatMemberDto acceptGroupInvitation(String chatId, Long inviterId, @NonNull RequestInitiator invitee) {
+        final Long inviteeId = invitee.userId();
+        final GroupChat groupChat = findGroupChat(chatId);
+
+        if (isMember(inviteeId, groupChat)) {
+            throw new BadRequestDataException("You are already a member");
+        }
+        if (groupChat.getMembersCount() >= groupChat.getMembersLimit()) {
+            throw new ChatOptionsViolationException("All members slots are occupied");
+        }
+
+        final UserDto user = userServiceClient.getUser(inviteeId, invitee.bearer());
+        if (user.isDeleted()) {
+            throw new BadCredentialsException("Invalid user ID id");
+        }
+
+        final ChatMember newMember = groupChat.addMember(inviteeId);
+        final var message = MemberMessage.builder()
+                .authorId(inviterId)
+                .action(Action.ADD)
+                .chat(groupChat)
+                .memberId(inviteeId)
+                .createdAt(newMember.getJoinedAt())
+                .build();
+
+        try {
+            txnTemplate.executeWithoutResult(txnStatus -> {
+                userService.createUserIfNeed(inviteeId);
+                messageService.saveMessage(message);
+                updateChat(groupChat);
+            });
+        } catch (TransactionException e) {
+            throw new ServiceErrorException(e);
+        }
+
+        return ChatMemberDto.builder()
+                .id(user.getId())
+                .joinedAt(newMember.getJoinedAt())
+                .role(newMember.getRole())
+                .details(ChatMemberDetailsDto.builder()
+                        .name(user.getName())
+                        .username(user.getUsername())
+                        .isOnline(user.isOnline())
+                        .isAvatarAvailable(nonNull(user.getAvatarPath()))
+                        .build())
+                .build();
     }
 
     @Override
