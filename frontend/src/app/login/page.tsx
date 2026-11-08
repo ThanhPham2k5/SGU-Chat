@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
@@ -49,14 +48,7 @@ export default function LoginPage() {
         <AuthLayout
             title="Đăng nhập"
             subtitle="Dùng tên đăng nhập và mật khẩu của bạn."
-            footer={
-                <p>
-                    Chưa có tài khoản?{" "}
-                    <Link href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
-                        Tạo tài khoản
-                    </Link>
-                </p>
-            }
+            footer={<p>Tài khoản do nhà trường cấp. Nếu chưa có tài khoản, vui lòng liên hệ phòng ban phụ trách.</p>}
         >
             <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-5" aria-busy={submitting}>
                 <TextField

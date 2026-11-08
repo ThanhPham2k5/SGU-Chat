@@ -43,3 +43,6 @@ spring:
 
 files:
   storage-folder: '${FILE_STORAGE_FOLDER:./storage}'
+
+app:
+  registration-enabled: ${REGISTRATION_ENABLED:false}

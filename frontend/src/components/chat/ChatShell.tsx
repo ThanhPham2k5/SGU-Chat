@@ -27,6 +27,8 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
     closed: "Đã ngắt kết nối",
 };
 
+const PAGE_SIZE = 50;
+
 function previewOf(message: Message): string {
     if (message.text) return message.text;
     return message.attachment ? `📎 ${message.attachment.filename}` : "";
@@ -89,6 +91,9 @@ export function ChatShell() {
     const [membersVersion, setMembersVersion] = useState(0);
     const [showMembers, setShowMembers] = useState(false);
     const [showInfo, setShowInfo] = useState(true);
+    // Còn tin cũ hơn để tải không, theo từng cuộc trò chuyện
+    const [hasOlder, setHasOlder] = useState<Record<string, boolean>>({});
+    const [loadingOlder, setLoadingOlder] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [query, setQuery] = useState("");
@@ -142,12 +147,37 @@ export function ChatShell() {
             try {
                 const list = await chatApi.listMessages(conversationId);
                 setMessages((prev) => ({ ...prev, [conversationId]: list }));
+                setHasOlder((prev) => ({ ...prev, [conversationId]: list.length >= PAGE_SIZE }));
             } catch (err) {
                 showNotice(errorMessage(err), "error");
             }
         },
         [showNotice],
     );
+
+    // Tải thêm tin cũ hơn. offset tính theo số tin đã có; tin trùng được bỏ qua theo id.
+    const loadOlder = useCallback(async () => {
+        if (!activeId || loadingOlder) return;
+        const current = messages[activeId] ?? [];
+        const known = new Set(current.map((m) => m.id));
+        setLoadingOlder(true);
+        try {
+            const older = await chatApi.listMessages(activeId, current.length, PAGE_SIZE);
+            const fresh = older.filter((m) => !known.has(m.id));
+            setMessages((prev) => {
+                const existing = prev[activeId] ?? [];
+                const seen = new Set(existing.map((m) => m.id));
+                const added = fresh.filter((m) => !seen.has(m.id));
+                const merged = [...added, ...existing].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+                return { ...prev, [activeId]: merged };
+            });
+            setHasOlder((prev) => ({ ...prev, [activeId]: fresh.length > 0 }));
+        } catch (err) {
+            showNotice(errorMessage(err), "error");
+        } finally {
+            setLoadingOlder(false);
+        }
+    }, [activeId, messages, loadingOlder, showNotice]);
 
     // Sau khi kết nối lại, tải lại toàn bộ trạng thái để bù các tin và sự kiện đã bỏ lỡ.
     const resync = useCallback(() => {
@@ -222,6 +252,17 @@ export function ChatShell() {
                     receive(event.message);
                 } else if (event.type === "invitation") {
                     void loadInvitations();
+                } else if (event.type === "chatDeleted") {
+                    // Nhóm bị xóa (bởi chủ nhóm, kể cả khi mình là người xóa): bỏ khỏi danh sách
+                    setMessages((prev) => {
+                        const next = { ...prev };
+                        delete next[event.conversationId];
+                        return next;
+                    });
+                    setActiveId((current) => (current === event.conversationId ? null : current));
+                    setShowMembers(false);
+                    showNotice("Nhóm đã bị xóa.", "info");
+                    void loadConversations();
                 } else if (event.type === "membership") {
                     if (event.kicked) {
                         // Bị xóa khỏi nhóm: bỏ lịch sử đã cache và đóng khung chat ngay
@@ -295,6 +336,14 @@ export function ChatShell() {
         membersState && membersState.groupId === activeId ? membersState.list : null;
     const isOwner = activeMembers?.some((m) => m.userId === me && m.isOwner) ?? false;
 
+    // Tin đến qua WebSocket không kèm tên người gửi, nên lấy tên từ danh sách thành viên
+    const displayMessages = useMemo(() => {
+        const names = new Map((activeMembers ?? []).map((m) => [m.userId, m.name]));
+        return activeMessages.map((m) =>
+            m.senderName ? m : { ...m, senderName: names.get(m.senderId) ?? "Thành viên" },
+        );
+    }, [activeMessages, activeMembers]);
+
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
         return conversations.filter((c) => c.title.toLowerCase().includes(q));
@@ -314,6 +363,13 @@ export function ChatShell() {
         setShowCreate(false);
         void loadConversations();
         openConversation(groupId);
+    }
+
+    // Xóa nhóm đang mở qua WebSocket; server phát CHAT_DELETED tới mọi thành viên
+    function deleteActiveGroup() {
+        if (!activeId) return;
+        const sent = socketRef.current?.deleteGroup(activeId) ?? false;
+        if (!sent) showNotice("Chưa kết nối được tới máy chủ. Vui lòng thử lại sau.", "error");
     }
 
     function handleLeft() {
@@ -644,6 +700,7 @@ export function ChatShell() {
                                         onLeft={handleLeft}
                                         onChanged={() => setMembersVersion((v) => v + 1)}
                                         onNotice={showNotice}
+                                        onDeleteGroup={deleteActiveGroup}
                                     />
                                 ) : (
                                     <div className="border-b border-line bg-surface px-4 py-3 text-sm text-muted">
@@ -657,9 +714,12 @@ export function ChatShell() {
                             <div className="flex min-w-0 flex-1 flex-col">
                                 <MessageList
                                     key={active.id}
-                                    messages={activeMessages}
+                                    messages={displayMessages}
                                     currentUserId={me}
                                     isGroup={active.kind === "group"}
+                                    hasOlder={hasOlder[active.id] ?? false}
+                                    loadingOlder={loadingOlder}
+                                    onLoadOlder={() => void loadOlder()}
                                 />
                                 <Composer onSend={sendMessage} />
                             </div>
@@ -680,6 +740,7 @@ export function ChatShell() {
                                                 onLeft={handleLeft}
                                                 onChanged={() => setMembersVersion((v) => v + 1)}
                                                 onNotice={showNotice}
+                                                onDeleteGroup={deleteActiveGroup}
                                             />
                                         ) : (
                                             <div className="px-4 py-3 text-sm text-muted">Đang tải thành viên...</div>

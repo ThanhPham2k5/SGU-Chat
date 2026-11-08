@@ -134,6 +134,7 @@ type MembersPanelProps = {
     onLeft: () => void;
     onChanged: () => void;
     onNotice: (text: string, tone: "info" | "error") => void;
+    onDeleteGroup: () => void;
 };
 
 export function MembersPanel({
@@ -144,6 +145,7 @@ export function MembersPanel({
                                  onChanged,
                                  onNotice,
                                  currentUserId,
+                                 onDeleteGroup,
                              }: MembersPanelProps) {
     const [username, setUsername] = useState("");
     const [newTitle, setNewTitle] = useState("");
@@ -219,6 +221,11 @@ export function MembersPanel({
         } finally {
             setBusy(false);
         }
+    }
+
+    function deleteGroup() {
+        if (!window.confirm("Xóa nhóm này? Toàn bộ tin nhắn sẽ bị xóa và không thể khôi phục.")) return;
+        onDeleteGroup();
     }
 
     async function leave() {
@@ -345,9 +352,19 @@ export function MembersPanel({
                 </form>
             ) : null}
 
-            <div className="border-t border-line pt-4">
+            <div className="flex flex-col gap-3 border-t border-line pt-4">
                 {isOwner ? (
-                    <p className="text-xs text-muted">Bạn là chủ nhóm nên không thể rời nhóm.</p>
+                    <>
+                        <p className="text-xs text-muted">Bạn là chủ nhóm nên không thể rời nhóm.</p>
+                        <button
+                            type="button"
+                            onClick={deleteGroup}
+                            disabled={busy}
+                            className="self-start text-sm text-danger underline-offset-4 hover:underline disabled:opacity-40"
+                        >
+                            Xóa nhóm
+                        </button>
+                    </>
                 ) : (
                     <button
                         type="button"

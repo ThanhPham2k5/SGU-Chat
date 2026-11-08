@@ -26,9 +26,10 @@ export const chatApi = {
         return chats.map(toConversation);
     },
 
-    listMessages: async (conversationId: string): Promise<Message[]> => {
+    // offset tính từ tin mới nhất; dùng để tải thêm tin cũ hơn
+    listMessages: async (conversationId: string, offset = 0, limit = 50): Promise<Message[]> => {
         const list = await apiFetch<BackendMessage[]>(
-            `${BASE}/${enc(conversationId)}/messages?offset=0&limit=50`,
+            `${BASE}/${enc(conversationId)}/messages?offset=${offset}&limit=${limit}`,
         );
         return toMessages(list, conversationId);
     },

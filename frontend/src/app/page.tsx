@@ -39,9 +39,6 @@ export default function HomePage() {
                         <Link href="/login" className={buttonClasses("primary")}>
                             Đăng nhập
                         </Link>
-                        <Link href="/signup" className={buttonClasses("outline")}>
-                            Tạo tài khoản
-                        </Link>
                     </div>
                 </section>
 

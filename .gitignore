@@ -1,4 +1,9 @@
 .idea
 .env
 .env.local
+
+# Khóa RSA và dữ liệu người dùng không được commit.
+# Sinh khóa bằng: bash backend/scripts/gen-keys.sh
 **/src/main/resources/keys/*.pem
+**/src/test/resources/keys/*.pem
+backend/*/storage/

@@ -73,6 +73,13 @@ export class ChatSocket {
         return true;
     }
 
+    // Xóa nhóm qua WebSocket để server xóa rồi phát CHAT_DELETED tới mọi thành viên
+    deleteGroup(conversationId: string): boolean {
+        if (!this.isOpen() || !this.ws) return false;
+        this.ws.send(encodeFrame(`/chat/group/${conversationId}/remove`, {}));
+        return true;
+    }
+
     private async connect(gen: number) {
         this.handlers.onStatus(this.attempt === 0 ? "connecting" : "reconnecting");
 
@@ -197,6 +204,12 @@ export class ChatSocket {
                     type: "membership",
                     conversationId: String(data.chatId),
                     kicked: false,
+                });
+                return;
+            case "CHAT_DELETED":
+                this.handlers.onChatEvent({
+                    type: "chatDeleted",
+                    conversationId: String(data.chatId),
                 });
                 return;
             case "ERROR":

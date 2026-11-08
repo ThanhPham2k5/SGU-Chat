@@ -9,16 +9,28 @@ type MessageListProps = {
     messages: Message[];
     currentUserId: string;
     isGroup: boolean;
+    hasOlder: boolean;
+    loadingOlder: boolean;
+    onLoadOlder: () => void;
 };
 
 // Khoảng cách (px) tính là "đang ở cuối"
 const NEAR_BOTTOM = 120;
 
-export function MessageList({ messages, currentUserId, isGroup }: MessageListProps) {
+export function MessageList({
+                                messages,
+                                currentUserId,
+                                isGroup,
+                                hasOlder,
+                                loadingOlder,
+                                onLoadOlder,
+                            }: MessageListProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     // Đang ở gần cuối thì tự cuộn khi có tin mới hoặc khi ảnh tải xong
     const pinned = useRef(true);
+    // Trạng thái lần render trước, để nhận biết tin cũ vừa được thêm lên đầu
+    const previous = useRef<{ first?: string; last?: string; height: number }>({ height: 0 });
 
     function scrollToBottom() {
         const el = scrollRef.current;
@@ -31,12 +43,27 @@ export function MessageList({ messages, currentUserId, isGroup }: MessageListPro
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
     }
 
-    // Khi có tin mới: tin của mình thì luôn xuống cuối, tin người khác chỉ xuống khi đang ở cuối
+    const firstId = messages[0]?.id;
+    const lastId = messages[messages.length - 1]?.id;
+
     useLayoutEffect(() => {
-        const last = messages[messages.length - 1];
-        if (last && last.senderId === currentUserId) pinned.current = true;
-        if (pinned.current) scrollToBottom();
-    }, [messages, currentUserId]);
+        const el = scrollRef.current;
+        if (!el) return;
+        const prev = previous.current;
+        const prepended = prev.first !== undefined && firstId !== prev.first && lastId === prev.last;
+
+        if (prepended) {
+            // Tin cũ được thêm lên trên: giữ nguyên vị trí người dùng đang xem
+            el.scrollTop += el.scrollHeight - prev.height;
+        } else {
+            // Tin mới: tin của mình thì luôn xuống cuối, tin người khác chỉ khi đang ở cuối
+            const last = messages[messages.length - 1];
+            if (last && last.senderId === currentUserId) pinned.current = true;
+            if (pinned.current) scrollToBottom();
+        }
+
+        previous.current = { first: firstId, last: lastId, height: el.scrollHeight };
+    }, [messages, currentUserId, firstId, lastId]);
 
     // Ảnh tải xong hoặc nội dung đổi kích thước sau khi render: giữ đáy nếu đang ở cuối
     useEffect(() => {
@@ -56,9 +83,23 @@ export function MessageList({ messages, currentUserId, isGroup }: MessageListPro
             className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8"
         >
             <div ref={contentRef} className="space-y-4">
+                {messages.length > 0 && hasOlder ? (
+                    <div className="flex justify-center">
+                        <button
+                            type="button"
+                            onClick={onLoadOlder}
+                            disabled={loadingOlder}
+                            className="h-8 rounded-md border border-line bg-surface px-3 text-xs text-muted transition-colors hover:bg-tint hover:text-ink disabled:opacity-50"
+                        >
+                            {loadingOlder ? "Đang tải..." : "Tải tin cũ hơn"}
+                        </button>
+                    </div>
+                ) : null}
+
                 {messages.length === 0 ? (
                     <p className="py-10 text-center text-sm text-muted">Chưa có tin nhắn nào.</p>
                 ) : null}
+
                 {messages.map((m) => {
                     const mine = m.senderId === currentUserId;
                     return (

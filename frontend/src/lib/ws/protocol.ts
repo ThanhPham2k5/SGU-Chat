@@ -10,7 +10,8 @@ export type SessionPayload = { userId: string; name: string };
 export type ChatEvent =
     | { type: "message"; message: Message }
     | { type: "invitation" }
-    | { type: "membership"; conversationId: string; kicked: boolean };
+    | { type: "membership"; conversationId: string; kicked: boolean }
+    | { type: "chatDeleted"; conversationId: string };
 
 export type ErrorPayload = { code: string; message: string };
 

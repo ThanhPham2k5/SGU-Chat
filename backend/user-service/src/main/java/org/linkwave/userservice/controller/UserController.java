@@ -12,12 +12,14 @@ import org.linkwave.userservice.dto.UserRegisterRequest;
 import org.linkwave.userservice.exception.LimitExceededException;
 import org.linkwave.userservice.exception.UnacceptableRequestDataException;
 import org.linkwave.userservice.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.util.Pair;
 import org.springframework.lang.NonNull;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -26,6 +28,7 @@ import static org.linkwave.shared.utils.Headers.TOTAL_COUNT;
 import static org.linkwave.userservice.controller.ConstraintErrorMessages.PAGINATION_PARAM_MAX_MSG;
 import static org.linkwave.userservice.controller.ConstraintErrorMessages.PAGINATION_PARAM_MIN_MSG;
 import static org.springframework.http.HttpStatus.CREATED;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.MediaType.*;
 
 @Slf4j
@@ -39,9 +42,16 @@ public class UserController {
 
     private final UserService userService;
 
+    // Tài khoản do nhà trường cấp, nên mặc định tắt đăng ký công khai
+    @Value("${app.registration-enabled:false}")
+    private boolean registrationEnabled;
+
     @PostMapping("/register")
     @ResponseStatus(CREATED)
     public void register(@Valid @RequestBody UserRegisterRequest request) {
+        if (!registrationEnabled) {
+            throw new ResponseStatusException(FORBIDDEN, "Đăng ký tài khoản đã bị tắt. Tài khoản do nhà trường cấp.");
+        }
         userService.register(request);
     }
 

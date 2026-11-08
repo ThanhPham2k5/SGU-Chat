@@ -16,6 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import java.time.Instant;
+import org.linkwave.shared.dto.ApiError;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -86,6 +90,17 @@ public class JwtTokensInitializerFilter extends OncePerRequestFilter {
 
         try {
             authentication = authenticationManager.authenticate(authentication);
+        } catch (LockedException e) {
+            log.debug("-> doFilterInternal(): account temporarily locked");
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            objectMapper.writeValue(response.getOutputStream(), ApiError.builder()
+                    .path(request.getRequestURI())
+                    .timestamp(Instant.now())
+                    .status(HttpStatus.TOO_MANY_REQUESTS.value())
+                    .message(e.getMessage())
+                    .build());
+            return;
         } catch (AuthenticationException e) {
             log.debug("-> doFilterInternal(): authentication failed");
             authenticationEntryPoint.commence(

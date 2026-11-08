@@ -88,8 +88,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(@NonNull AuthenticationConfiguration configuration) throws Exception {
-        return configuration.getAuthenticationManager();
+    public AuthenticationManager authenticationManager(@NonNull AuthenticationConfiguration configuration,
+                                                       LoginAttemptService loginAttemptService) throws Exception {
+        return new ThrottledAuthenticationManager(configuration.getAuthenticationManager(), loginAttemptService);
     }
 
     @Bean

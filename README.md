@@ -2,11 +2,21 @@
 
 Ứng dụng chat nội bộ cho Đại học Sài Gòn, giao diện kiểu Zalo. Mã nguồn mở, tự host, không kết nối ra dịch vụ bên ngoài khi chạy.
 
+## Chuẩn bị
+
+Khóa RSA không nằm trong repo. Sau khi clone, sinh khóa trước khi chạy backend hoặc test:
+
+```bash
+bash backend/scripts/gen-keys.sh
+```
+
+Đăng ký công khai đã tắt, vì tài khoản do nhà trường cấp. Muốn bật lại khi chạy user-service thì đặt `REGISTRATION_ENABLED=true`.
+
 ## Kiến trúc
 
 | Thành phần | Công nghệ | Cổng |
 |---|---|---|
-| frontend | Next.js 14 | 3000 |
+| frontend | Next.js 16 | 3000 |
 | api-gateway | Spring Cloud Gateway | 8080 |
 | discovery-service | Eureka | 8761 |
 | auth-service | Spring Boot, JWT, PostgreSQL | 8081 |
@@ -58,10 +68,10 @@ Nếu báo `already initialized` thì bỏ qua.
 Mở `backend/auth-service/src/main/resources/application.yml` và `backend/user-service/src/main/resources/application.yml`, sửa phần `datasource`:
 
 ```yaml
-  datasource:
-    url: 'jdbc:postgresql://localhost:15432/lw-users'
-    username: 'postgres'
-    password: 'postgres'
+datasource:
+  url: 'jdbc:postgresql://localhost:15432/lw-users'
+  username: 'postgres'
+  password: 'postgres'
 ```
 
 Mật khẩu phải khớp với `USERS_DB_PASSWORD` trong `backend/.env`.
@@ -71,7 +81,7 @@ Mật khẩu phải khớp với `USERS_DB_PASSWORD` trong `backend/.env`.
 Mở `backend/ws-server/src/main/resources/application.yml`, sửa cổng Redis:
 
 ```yaml
-      port: 16379
+port: 16379
 ```
 
 ### 3.3 Thư mục lưu file
