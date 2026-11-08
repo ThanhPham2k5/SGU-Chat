@@ -18,6 +18,8 @@ import org.linkwave.ws.websocket.routing.broadcast.instances.MessageDelegate;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.RequestBody;
 import static org.springframework.http.HttpStatus.NO_CONTENT;
+import org.linkwave.ws.websocket.dto.OutcomeMessage;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 @Slf4j
 @RestController
@@ -93,6 +95,21 @@ public class WSChatsController {
     }
 
     public record MembershipNotification(String action, Long memberId, Long initiatorId) {}
+
+    @PostMapping("/bot-messages")
+    @ResponseStatus(NO_CONTENT)
+    public void notifyBotMessage(@RequestBody BotMessageNotification notification) {
+        final var message = OutcomeMessage.builder()
+                .action(Action.MESSAGE)
+                .id(notification.id())
+                .chatId(notification.chatId())
+                .senderId(notification.senderId())
+                .senderName(notification.senderName())
+                .text(notification.text())
+                .timestamp(notification.timestamp())
+                .build();
+        messageDelegate.handleMessage(objectMapper.writeValueAsString(message));
+    }
 
     private DefaultUserDetails userDetails() {
         return (DefaultUserDetails) SecurityContextHolder.getContext()

@@ -2,9 +2,11 @@ package org.linkwave.chatservice.message.text;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.hibernate.validator.constraints.Length;
 
 @Getter
+@NoArgsConstructor
 public class NewTextMessage {
 
     @NotNull(message = "must be present")
@@ -13,5 +15,9 @@ public class NewTextMessage {
             message = "length must be in range [1, 512]"
     )
     private String text;
+
+    public NewTextMessage(String text) {
+        this.text = text;
+    }
 
 }

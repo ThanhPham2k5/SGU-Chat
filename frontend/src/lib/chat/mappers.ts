@@ -1,3 +1,4 @@
+import { BOT_USERNAME, timeValue } from "@/lib/chat/sort";
 import type { Attachment, Conversation, Member, Message } from "./types";
 
 // Kiểu JSON đúng như chat-service trả về
@@ -75,6 +76,7 @@ export function toConversation(chat: BackendChat): Conversation {
         lastMessage: previewOf(chat.lastMessage),
         lastTime: chat.lastMessage?.createdAt ?? chat.createdAt,
         unread: 0,
+        pinned: chat.user?.username === BOT_USERNAME,
     };
 }
 
@@ -107,7 +109,7 @@ export function toMessages(list: BackendMessage[], conversationId: string): Mess
     return list
         .map((message) => toMessage(message, conversationId))
         .filter((message): message is Message => message !== null)
-        .sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+        .sort((a, b) => timeValue(a.time) - timeValue(b.time));
 }
 
 export function toMembers(details: BackendGroupDetails): Member[] {

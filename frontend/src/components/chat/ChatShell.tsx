@@ -10,6 +10,7 @@ import { setAccessToken } from "@/lib/auth/session";
 import { chatApi, errorMessage } from "@/lib/chat/api";
 import { uploadFile, type CreatedFile } from "@/lib/chat/files";
 import { formatChatTime } from "@/lib/chat/time";
+import { pinnedFirst, timeValue } from "@/lib/chat/sort";
 import type { Conversation, Invitation, Member, Message } from "@/lib/chat/types";
 import { ChatSocket, type ConnectionStatus } from "@/lib/ws/chat-socket";
 import type { ChatEvent } from "@/lib/ws/protocol";
@@ -168,7 +169,7 @@ export function ChatShell() {
                 const existing = prev[activeId] ?? [];
                 const seen = new Set(existing.map((m) => m.id));
                 const added = fresh.filter((m) => !seen.has(m.id));
-                const merged = [...added, ...existing].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+                const merged = [...added, ...existing].sort((a, b) => timeValue(a.time) - timeValue(b.time));
                 return { ...prev, [activeId]: merged };
             });
             setHasOlder((prev) => ({ ...prev, [activeId]: fresh.length > 0 }));
@@ -225,7 +226,10 @@ export function ChatShell() {
                 const list = prev[message.conversationId] ?? [];
                 // Bỏ qua tin trùng, vì tin có thể vừa được tải lại khi kết nối lại.
                 if (list.some((m) => m.id === message.id)) return prev;
-                return { ...prev, [message.conversationId]: [...list, message] };
+                return {
+                    ...prev,
+                    [message.conversationId]: [...list, message].sort((a, b) => timeValue(a.time) - timeValue(b.time)),
+                };
             });
             setConversations((prev) => {
                 const target = prev.find((c) => c.id === message.conversationId);
@@ -346,7 +350,7 @@ export function ChatShell() {
 
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return conversations.filter((c) => c.title.toLowerCase().includes(q));
+        return pinnedFirst(conversations.filter((c) => c.title.toLowerCase().includes(q)));
     }, [conversations, query]);
 
     function openConversation(id: string) {

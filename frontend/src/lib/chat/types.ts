@@ -7,6 +7,8 @@ export type Conversation = {
     lastMessage: string;
     lastTime: string;
     unread: number;
+    /** Ghim lên đầu danh sách (chat bot). Không thể xóa. */
+    pinned?: boolean;
 };
 
 export type Attachment = {

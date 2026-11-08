@@ -44,4 +44,11 @@ public interface WSServiceClient {
             @RequestBody InvitationNotification notification
     );
 
+
+    @PostMapping("/bot-messages")
+    void notifyBotMessage(
+            @RequestHeader(AUTHORIZATION) String authHeader,
+            @RequestBody BotMessageNotification notification
+    );
+
 }

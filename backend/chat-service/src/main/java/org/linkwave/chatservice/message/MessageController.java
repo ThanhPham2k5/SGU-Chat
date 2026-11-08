@@ -30,6 +30,7 @@ import static org.linkwave.chatservice.common.RequestUtils.requestInitiator;
 import static org.linkwave.chatservice.common.RequestUtils.userDetails;
 import static org.linkwave.shared.utils.Headers.TOTAL_COUNT;
 import static org.springframework.http.HttpStatus.*;
+import org.linkwave.chatservice.bot.BotService;
 
 @Slf4j
 @RestController
@@ -38,6 +39,7 @@ import static org.springframework.http.HttpStatus.*;
 public class MessageController {
 
     private final MessageService messageService;
+    private final BotService botService;
 
     @JsonView(New.class)
     @PostMapping("/{chatId}/messages")
@@ -51,8 +53,11 @@ public class MessageController {
     @PostMapping("/{chatId}/messages/text")
     @ResponseStatus(CREATED)
     public MessageDto saveTextMessage(@PathVariable String chatId,
-                                      @Valid @RequestBody NewTextMessage message) {
-        return messageService.saveTextMessage(userDetails().id(), chatId, message);
+                                      @Valid @RequestBody NewTextMessage message,
+                                      @NonNull HttpServletRequest request) {
+        final MessageDto sent = messageService.saveTextMessage(userDetails().id(), chatId, message);
+        botService.onUserMessage(requestInitiator(request), chatId, message.getText());
+        return sent;
     }
 
     @PostMapping("/{chatId}/messages/file")
