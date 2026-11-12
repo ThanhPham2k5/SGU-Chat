@@ -35,7 +35,6 @@ services:
       POSTGRES_PASSWORD: ${USERS_DB_PASSWORD:?Set USERS_DB_PASSWORD in backend/.env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./user-service/src/main/resources/docker-init/users_db.sql:/docker-entrypoint-initdb.d/01-users-db.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -163,6 +162,8 @@ services:
     ports:
       - "8081:8081"
     depends_on:
+      user-service:
+        condition: service_healthy
       discovery-service:
         condition: service_healthy
       users-db:
