@@ -8,7 +8,6 @@ import org.linkwave.userservice.entity.UserEntity;
 import org.linkwave.userservice.exception.UnacceptableRequestDataException;
 import org.linkwave.userservice.repository.RoleCatalogRepository;
 import org.linkwave.userservice.repository.UserRepository;
-import org.linkwave.userservice.service.TemporaryPasswords;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,7 +37,7 @@ public class AcademicImportService {
     public enum Kind { FACULTIES, CLASSES, SUBJECTS, LECTURERS, STUDENTS, TIMETABLE, EXAMS, DUTIES, TERMS }
 
     /** Mật khẩu mặc định cho giảng viên. Bắt buộc đổi ở lần đăng nhập đầu. */
-    public static final String DEFAULT_LECTURER_PASSWORD = "Dhsg@123";
+    public static final String DEFAULT_PASSWORD = "Dhsg@123";
 
     public record RowError(int row, String message) {
     }
@@ -380,12 +379,12 @@ public class AcademicImportService {
             if (userId == null) {
                 userId = userRepository.save(UserEntity.builder()
                         .username(r.code())
-                        .password(passwordEncoder.encode(DEFAULT_LECTURER_PASSWORD))
+                        .password(passwordEncoder.encode(DEFAULT_PASSWORD))
                         .name(r.name())
                         .roles(new ArrayList<>(List.of(baseRole, lecturerRole)))
                         .mustChangePassword(true)
                         .build()).getId();
-                created.add(new CreatedAccount(r.code(), r.name(), DEFAULT_LECTURER_PASSWORD));
+                created.add(new CreatedAccount(r.code(), r.name(), DEFAULT_PASSWORD));
             } else {
                 jdbc.update("update users set name = ? where id = ?", r.name(), userId);
                 updated++;
@@ -474,15 +473,14 @@ public class AcademicImportService {
         for (StudentRow r : rows) {
             Long userId = existing.get(r.mssv());
             if (userId == null) {
-                final String temporary = TemporaryPasswords.generate(r.mssv());
                 userId = userRepository.save(UserEntity.builder()
                         .username(r.mssv())
-                        .password(passwordEncoder.encode(temporary))
+                        .password(passwordEncoder.encode(DEFAULT_PASSWORD))
                         .name(r.name())
                         .roles(new ArrayList<>(List.of(baseRole, studentRole)))
                         .mustChangePassword(true)
                         .build()).getId();
-                created.add(new CreatedAccount(r.mssv(), r.name(), temporary));
+                created.add(new CreatedAccount(r.mssv(), r.name(), DEFAULT_PASSWORD));
             } else {
                 jdbc.update("update users set name = ? where id = ?", r.name(), userId);
                 updated++;

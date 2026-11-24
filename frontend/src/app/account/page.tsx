@@ -168,17 +168,14 @@ export default function AccountPage() {
                                 Đổi mật khẩu
                             </Link>
                         </div>
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-b-0 last:pb-0">
-                            <span>
-                                Xác thực hai lớp:{" "}
-                                {isAdmin ? (hasMfa() ? "đã bật" : "chưa bật") : "chỉ áp dụng cho quản trị viên"}
-                            </span>
-                            {isAdmin ? (
+                        {isAdmin ? (
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-b-0 last:pb-0">
+                                <span>Xác thực hai lớp: {hasMfa() ? "đã bật" : "chưa bật"}</span>
                                 <Link href="/security/2fa" className={buttonClasses("secondary", "", "sm")}>
                                     Quản lý 2FA
                                 </Link>
-                            ) : null}
-                        </div>
+                            </div>
+                        ) : null}
                         <div className="flex flex-col gap-2 last:pb-0">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <span>Đăng xuất tất cả thiết bị</span>

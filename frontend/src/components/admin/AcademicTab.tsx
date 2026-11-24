@@ -57,7 +57,7 @@ export const STUDENT_CARD: CardSpec = {
     kind: "students",
     title: "Sinh viên",
     columns: "MSSV, Họ tên, Lớp, CCCD (không bắt buộc)",
-    note: "Lớp trong file phải đã có ở mục Khoa & lớp. Tạo tài khoản mới với mật khẩu tạm. Nếu tài khoản đã có thì chỉ cập nhật họ tên, lớp và CCCD. CCCD được mã hóa khi lưu.",
+    note: "Lớp trong file phải đã có ở mục Khoa & lớp. Tạo tài khoản mới với mật khẩu mặc định Dhsg@123. Nếu tài khoản đã có thì chỉ cập nhật họ tên, lớp và CCCD. CCCD được mã hóa khi lưu.",
 };
 
 const TIMETABLE_CARD: CardSpec = {
@@ -520,7 +520,7 @@ function AccountsView({ accounts }: { accounts: CreatedAccount[] }) {
         <div className="flex flex-col gap-3 border-t border-line pt-4">
             <h4 className={SECTION_TITLE}>Tài khoản mới ({accounts.length})</h4>
             <p className={HELP}>
-                Mật khẩu tạm chỉ hiển thị lúc này. Gửi cho người dùng qua kênh an toàn; họ phải đổi mật khẩu khi đăng nhập.
+                Các tài khoản vừa tạo dùng mật khẩu mặc định Dhsg@123. Họ phải đổi mật khẩu khi đăng nhập lần đầu.
             </p>
             <div className={`${TABLE_WRAP} max-h-64 overflow-y-auto`}>
                 <table className={TABLE}>
