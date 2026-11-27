@@ -8,7 +8,7 @@ Chat nội bộ cho Đại học Sài Gòn, kiểu Zalo: chat riêng, nhóm lớ
 - **Tin nhắn**: gửi nhiều tệp cùng lúc, thư viện ảnh và tệp của từng cuộc trò chuyện, xóa tin (tác giả hoặc admin nhóm). Liên kết cần xác nhận trước khi mở.
 - **Bot**: `/tkb` (thời khóa biểu), `/lichthi`, `/lop`, `/lichgac`.
 - **Tài khoản**: hồ sơ, đổi số điện thoại và địa chỉ, đổi mật khẩu, đăng xuất mọi thiết bị.
-- **Xác thực hai lớp (2FA)**: chỉ dành cho tài khoản ADMIN và ROOT, có mã khôi phục.
+- **Xác thực hai lớp (2FA)**: bật cho ADMIN và ROOT. Duyệt đăng nhập bằng ứng dụng SGU Approve trên điện thoại (`app/otp-app`), có mã 6 số dự phòng và 8 mã khôi phục. ROOT có thể đặt lại 2FA cho ADMIN sau thời gian chờ.
 - **Quản trị học vụ**: import Excel (khoa, lớp, sinh viên, giảng viên, thời khóa biểu, học kỳ, môn học, lịch thi, lịch gác thi), đồng bộ nhóm học vụ theo bấm nút, quản lý người dùng, vai trò, phân quyền, báo cáo tin nhắn, nhật ký hệ thống.
 
 Tài khoản do nhà trường cấp. Không có đăng ký công khai.
@@ -27,6 +27,7 @@ Tài khoản do nhà trường cấp. Không có đăng ký công khai.
 | users-db | PostgreSQL 16 (CSDL `lw-users`) | 15432 |
 | chat-db | MongoDB 7 (replica set `rs0`) | 27017 |
 | redis-sessions | Redis | 16379 |
+| otp-app (SGU Approve) | React Native (Expo), Android. Ứng dụng duyệt đăng nhập ADMIN/ROOT, không có cổng máy chủ | — |
 
 - User Service chịu trách nhiệm thực thi Flyway migration cho PostgreSQL lw-users.
 - Auth Service sử dụng chung database PostgreSQL nhưng không tự chạy migration.
@@ -39,13 +40,14 @@ Cấu trúc thư mục:
 backend/
   api-gateway/  auth-service/  user-service/  chat-service/  ws-server/  discovery-service/
   shared/       Mã dùng chung (mã hóa CCCD, lỗi, bảo mật nội bộ)
-  scripts/      gen-keys.sh (sinh khóa trên WSL/Linux); các script phụ trợ .ps1
-  gen-keys.ps1  Sinh khóa RSA cho auth-service (Windows)
+  gen-keys.ps1  Sinh khóa RSA cho auth-service
+  test-chats.ps1, fix-spring-security-matchers.ps1, migrate-jackson3.ps1  Công cụ phụ trợ
   docker-compose.yml, .env.example
 frontend/
   src/app/        Các trang (chat, admin, account, login, change-password, security/2fa)
   src/components/ Giao diện theo khu vực; components/ui là bộ thành phần dùng chung
   src/lib/        Gọi API, WebSocket, định dạng dữ liệu
+app/otp-app/     Ứng dụng SGU Approve (Android). Xem app/otp-app/README.md
 test-data/        9 file Excel mẫu để import (xem bên dưới)
 scripts/reset/    Script xóa dữ liệu (chỉ chạy khi cần, xem bên dưới)
 ```
@@ -65,46 +67,33 @@ scripts/reset/    Script xóa dữ liệu (chỉ chạy khi cần, xem bên dư�
 
 ### 1. Sinh khóa và tạo file môi trường
 
-Chạy trong PowerShell, tại thư mục gốc của repo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\backend\gen-keys.ps1
+```bash
+powershell -ExecutionPolicy Bypass -File .\backend\gen-keys.ps1   # chạy trong PowerShell, tại thư mục gốc; sinh cặp khóa RSA cho auth-service
+cp backend/.env.example backend/.env
+cp frontend/env.example frontend/.env.local
 ```
 
-Kết quả phải là dòng `Keys generated`. Script sinh cặp khóa RSA cho auth-service và sao chép khóa công khai sang user-service, chat-service, ws-server.
-
-Nếu chạy trong WSL, dùng `backend/scripts/gen-keys.sh` thay cho script trên.
-
-Sau đó tạo file môi trường:
-
-```powershell
-Copy-Item backend\.env.example backend\.env
-Copy-Item frontend\env.example frontend\.env.local
-```
-
-Các giá trị còn lại trong `backend/.env` tự tạo bằng `openssl rand -base64 32` (trong WSL) hoặc đặt chuỗi ngẫu nhiên tương ứng:
+`gen-keys.ps1` chỉ sinh khóa RSA (access và refresh token). Các giá trị còn lại trong `backend/.env` tự tạo bằng `openssl rand -base64 32`:
 
 - `CCCD_ENCRYPTION_KEY` và `CCCD_INDEX_KEY`: mỗi khóa phải giải mã base64 ra đúng 32 byte, nếu không user-service sẽ không khởi động.
 - `TOTP_KEY_1`: 32 byte base64. `TOTP_KEY_VERSION` để mặc định là `1`.
+- `TWOFA_RESET_DELAY_MINUTES` (tùy chọn): thời gian chờ trước khi ROOT thực hiện đặt lại 2FA cho ADMIN. Mặc định `1440` (24 giờ). Có thể đặt nhỏ hơn khi test, nhưng không nên để nhỏ khi triển khai.
 - `INTERNAL_SERVICE_KEY`: dùng chung cho mọi service, phải giống nhau.
 - `TWO_FACTOR_CHALLENGE_SECRET`: chuỗi ngẫu nhiên từ 32 ký tự trở lên.
-- `BOT_USER_ID`: xem bước 5, để `0` cho đến khi tạo xong tài khoản sgu_bot.
 
 Không đổi các khóa này khi đã có dữ liệu: đổi `TOTP_KEY_1` sẽ làm không đọc được secret 2FA đã lưu, và đổi khóa CCCD làm không đọc được CCCD đã mã hóa. Không commit `.env` thật.
 
 ### 2. Chạy cơ sở dữ liệu
 
-```powershell
+```bash
 cd backend
 docker compose up -d --no-deps users-db redis-sessions discovery-service chat-db
 ```
 
 Sau khi chat-db healthy:
-
-```powershell
+```bash
 docker compose up -d --no-deps mongo-init
 ```
-
 `--no-deps` bắt buộc ở đây: `chat-db` trong compose phụ thuộc auth-service, nếu không có cờ này compose sẽ kéo cả auth và user lên và chiếm cổng 8081, 8082 trước khi chạy Maven. Service `mongo-init` khởi tạo replica set `rs0` sau khi `chat-db` sẵn sàng. Kiểm tra bằng `docker compose logs mongo-init`.
 
 ### 3. Chạy backend
@@ -113,16 +102,12 @@ Có hai cách.
 
 **Cách A, toàn bộ bằng Docker:**
 
-```powershell
+```bash
 cd backend
 docker compose up -d --build
 ```
 
-Flyway tự động chạy khi User Service khởi động và áp dụng V1 đến V6. Kiểm tra bằng:
-
-```powershell
-docker compose logs user-service | Select-String -Pattern "Successfully applied"
-```
+Flyway tự động chạy khi User Service khởi động. Không cần chạy SQL thủ công.
 
 Compose chỉ chạy **một** ws-server (container `ws-server`, cổng 9090). Không thêm instance thứ hai khi phát triển: mỗi instance giữ kết nối WebSocket trong bộ nhớ riêng, và việc chuyển tin giữa các instance chưa hoạt động đúng, nên tin realtime (tin nhắn, lời mời, tin của bot) sẽ không đến đều.
 
@@ -163,53 +148,20 @@ Kiểm tra: `http://localhost:8761` (Eureka) phải thấy đủ các service đ
 
 ### 4. Chạy frontend
 
-```powershell
+```bash
 cd frontend
 npm ci
-npm run dev
+npm run dev        # http://localhost:3000
 ```
 
-Mở `http://localhost:3000`.
-
-### 5. Khởi tạo dữ liệu nền (sau khi backend chạy)
-
-Thực hiện theo đúng thứ tự, sau khi user-service đã áp dụng xong Flyway.
-
-**5.1. Tạo tài khoản root.** Đặt mật khẩu tạm không chứa dấu nháy đơn:
-
-```powershell
-$ROOT_PW = "mat-khau-tam-cua-ban"
-docker exec -i users-db psql -U postgres -d lw-users -c "insert into users (username, password, name, must_change_password) values ('root', crypt('$ROOT_PW', gen_salt('bf', 10)), 'Quản trị cao nhất', true) on conflict (username) do update set password = excluded.password, must_change_password = true;"
-docker exec -i users-db psql -U postgres -d lw-users -c "insert into user_roles (users_id, roles_id) select u.id, r.id from users u, roles r where u.username = 'root' and r.name = 'ROLE_ROOT' on conflict do nothing;"
-Remove-Variable ROOT_PW
-```
-
-Lệnh có thể chạy lại để đặt lại mật khẩu root; mỗi lần chạy sẽ ghi đè mật khẩu cũ. Tài khoản được đặt cờ bắt buộc đổi mật khẩu, nên lần đăng nhập đầu sẽ phải đổi.
-
-Đăng nhập bằng `root`, đổi mật khẩu. Tài khoản ROOT là tài khoản bắt buộc bật 2FA: vào **Tài khoản → Quản lý 2FA** để bật.
-
-**5.2. Lấy id của sgu_bot và đặt BOT_USER_ID.** Tài khoản sgu_bot được tạo tự động bởi migration V6, nhưng id của nó thay đổi mỗi lần tạo lại database:
-
-```powershell
-docker exec -i users-db psql -U postgres -d lw-users -tAc "select id from users where username='sgu_bot';"
-```
-
-Mở `backend\.env`, đặt `BOT_USER_ID=<số vừa lấy>` (phải là số nguyên). Sau đó tạo lại chat-service để nhận giá trị mới:
-
-```powershell
-cd backend
-docker compose up -d --no-deps --force-recreate chat-service
-```
-
-Lệnh `docker compose restart` không đủ, vì nó không đọc lại file `.env`.
+Lập trình viên tự tạo tài khoản root trong môi trường local. Đổi mật khẩu ngay sau lần đăng nhập đầu tiên.
 
 ## Database Schema Migration (Flyway)
-
 A. Cách hoạt động
 - Flyway được tích hợp tại User Service.
-- Migration nằm trong `backend/user-service/src/main/resources/db/migration/`.
+- Migration nằm trong backend/user-service/src/main/resources/db/migration/.
 - Migration tự động chạy khi User Service khởi động.
-- Các migration đã thực hiện được lưu trong `flyway_schema_history`.
+- Các migration đã thực hiện được lưu trong flyway_schema_history.
 - Auth Service dùng chung PostgreSQL nhưng không thực thi migration riêng.
 - Hibernate ddl-auto: validate để kiểm tra schema.
 
@@ -223,28 +175,39 @@ B. Danh sách migration
 | V4        | Tạo user_profiles và các bảng xác thực |
 | V5        | Seed roles và permissions |
 | V6        | Seed tài khoản sgu_bot |
+| V7        | Tạo otp_devices, otp_pairings, otp_requests (duyệt đăng nhập qua otp-app) |
+| V8        | Tạo twofa_resets (yêu cầu đặt lại 2FA cho ADMIN) |
 
 C. Quy tắc khi phát triển
 - Không chỉnh sửa migration đã được thực thi.
-- Khi cần thêm bảng, cột hoặc index, tạo migration phiên bản mới (ví dụ `V7__ten_thay_doi.sql`).
+- Khi cần thêm bảng, cột hoặc index, tạo migration phiên bản mới.
+- Ví dụ migration tiếp theo là V9__...sql.
 - Không chạy lại migration đã hoàn thành.
 - Không sử dụng Hibernate ddl-auto: update để thay đổi schema.
 
-D. Database cũ (tạo trước khi có Flyway)
+**Lưu ý:**
+database cũ được tạo trước Flyway không được tự động coi là database mới. Phải backup, đối chiếu schema và baseline đúng phiên bản trước khi áp dụng.
 
-Nếu database được tạo bằng các file `phase*.sql` cũ, Flyway sẽ dừng khi khởi động vì schema không rỗng nhưng chưa có bảng `flyway_schema_history`. Không tự động baseline được. Cách đơn giản nhất là tạo lại database (sao lưu trước nếu còn dữ liệu cần giữ):
+## Tạo tài khoản root
 
-```powershell
-docker exec users-db pg_dump -U postgres lw-users > lw-users-backup.sql
-docker exec -i users-db psql -U postgres -c 'DROP DATABASE "lw-users";' -c 'CREATE DATABASE "lw-users";'
-docker compose up -d --force-recreate user-service
+Chạy sau bước 2 (cần vai trò `ROLE_ROOT` có sẵn). Lệnh hỏi mật khẩu tạm và không hiện ký tự khi gõ. Tài khoản được đặt cờ bắt buộc đổi mật khẩu, nên lần đăng nhập đầu sẽ phải đổi.
+
+```bash
+read -s -p "Mật khẩu root tạm (không chứa dấu nháy đơn): " ROOT_PW; echo
+docker exec -i users-db psql -U postgres -d lw-users -c "insert into users (username, password, name, must_change_password) values ('root', crypt('$ROOT_PW', gen_salt('bf', 10)), 'Quản trị cao nhất', true) on conflict (username) do update set password = excluded.password, must_change_password = true;"
+docker exec -i users-db psql -U postgres -d lw-users -c "insert into user_roles (users_id, roles_id) select u.id, r.id from users u, roles r where u.username = 'root' and r.name = 'ROLE_ROOT' on conflict do nothing;"
+unset ROOT_PW
 ```
 
-Sau đó làm lại bước 5 và nhập lại dữ liệu học vụ.
+Lệnh có thể chạy lại để đặt lại mật khẩu root; mỗi lần chạy sẽ ghi đè mật khẩu cũ.
+
+Sau khi đăng nhập bằng `root`, đổi mật khẩu, rồi vào **Xác thực hai lớp** để bật 2FA cho tài khoản này. Bật 2FA cần cài ứng dụng SGU Approve trên điện thoại và ghép với tài khoản (xem `app/otp-app/README.md`). Ghi lại 8 mã khôi phục hiện ra sau khi bật.
+
+`dataset.sql` ở thư mục `resources` không nằm trong danh sách này và không chạy trên DB thật, vì nó chứa tài khoản mẫu.
 
 ## Nhập dữ liệu đào tạo
 
-Flyway không tự động import dữ liệu từ các file Excel trong `test-data/`. Quản trị viên cần đăng nhập và thực hiện import thông qua giao diện Học vụ theo đúng thứ tự được hướng dẫn.
+Flyway không tự động import dữ liệu từ các file Excel trong test-data/. Quản trị viên cần đăng nhập và thực hiện import thông qua giao diện Học vụ theo đúng thứ tự được hướng dẫn.
 
 Đăng nhập bằng tài khoản admin, vào tab **Học vụ**. Import theo đúng thứ tự, vì mỗi file phụ thuộc file trước:
 
@@ -258,10 +221,6 @@ Flyway không tự động import dữ liệu từ các file Excel trong `test-d
 8. `5-lich-thi.xlsx`
 9. `6-lich-gac-thi.xlsx`
 
-Mật khẩu ban đầu:
-- Giảng viên và sinh viên được tạo mới khi import đều có mật khẩu mặc định `Dhsg@123`, và phải đổi khi đăng nhập lần đầu.
-- Tài khoản đã tồn tại chỉ được cập nhật tên, không đổi mật khẩu.
-
 **Lưu ý:** Sau khi import, bấm **Đồng bộ nhóm học vụ**. Nhóm lớp, môn, khoa được tạo từ dữ liệu này. Đồng bộ là thao tác thủ công của admin; chạy lại không tạo nhóm trùng, nhưng lời mời đã từ chối sẽ được gửi lại.
 
 Các file mẫu nằm trong `test-data/`. Có thể nhập tay cho từng bản ghi ở mọi tab import.
@@ -272,11 +231,11 @@ Các file mẫu nằm trong `test-data/`. Có thể nhập tay cho từng bản 
 
 ### Bước 1: MongoDB (tin nhắn, nhóm chat)
 
-Chạy qua container `chat-db`, từ thư mục chứa `reset-chat.js`:
+Chạy qua container `chat-db`, từ WSL tại thư mục chứa `reset-chat.js`:
 
 1. Chạy thử. File đang để `DRY_RUN = true`, lệnh chỉ in số document, không xóa gì:
-   ```powershell
-   Get-Content reset-chat.js -Raw | docker exec -i chat-db mongosh linkwave --quiet
+   ```bash
+   docker exec -i chat-db mongosh linkwave --quiet < reset-chat.js
    ```
 2. Khi số liệu đúng, mở file, đổi `const DRY_RUN = true;` thành `const DRY_RUN = false;`, lưu, rồi chạy lại lệnh trên.
 
@@ -288,24 +247,28 @@ Chạy trong TablePlus, kết nối `localhost`, cổng `15432`, user `postgres`
 
 1. Mở `reset-keep-root-and-roles.sql`, chạy phần kiểm tra trước (phần A).
 2. Chạy toàn bộ file. File có `BEGIN;` ở đầu và **không** có `COMMIT;`, nên thay đổi chưa được ghi vào DB.
-3. Xem kết quả phần C: `users = 2` (root và sgu_bot), các bảng dữ liệu bằng 0, còn `roles`, `permissions`, `role_permissions` giữ nguyên.
+3. Xem kết quả phần C: `users = 1`, các bảng dữ liệu bằng 0, còn `roles`, `permissions`, `role_permissions` giữ nguyên.
 4. Đúng thì chạy `COMMIT;`, sai thì chạy `ROLLBACK;`. Trong TablePlus, nếu có nút Commit thì bấm nút đó.
 
 Script giữ lại hai tài khoản hệ thống root và sgu_bot, cùng toàn bộ roles, permissions và role_permissions. Các tài khoản người dùng khác, dữ liệu học vụ, hồ sơ cá nhân, danh bạ và dữ liệu audit sẽ được xóa.
 
-Bảng `flyway_schema_history` và các migration đã thực thi được giữ nguyên. Bảng `deactivated_tokens` cũng được giữ lại để không làm mất trạng thái thu hồi access token.
+Bảng flyway_schema_history và các migration đã thực thi được giữ nguyên. Bảng deactivated_tokens cũng được giữ lại để không làm mất trạng thái thu hồi access token.
 
-Vì sgu_bot được giữ lại, id của nó không đổi và không cần đặt lại `BOT_USER_ID`. Sau khi reset, database vẫn giữ nguyên schema và có thể tiếp tục hoạt động mà không cần chạy lại migration.
+Sau khi reset, database vẫn giữ nguyên schema và có thể tiếp tục hoạt động mà không cần chạy lại migration.
 
-**Lưu ý:** Sao lưu DB trước khi chạy cả hai bước.
+**Lưu ý:** Sao lưu DB trước khi chạy cả ba bước.
 
 ## Bảo mật và giới hạn đã biết
 
-- CCCD, dân tộc và tôn giáo được mã hóa AES-GCM trước khi lưu. Xem thông tin đầy đủ cần quyền và được ghi vào nhật ký.
+- CCCD, dân tộc và tôn giáo được mã hóa AES-GCM. Xem thông tin đầy đủ cần quyền và được ghi vào nhật ký.
 - Mọi lệnh gọi nội bộ giữa service dùng `INTERNAL_SERVICE_KEY`.
 - Khóa tài khoản: WebSocket đang mở bị ngắt ngay; phiên HTTP còn hiệu lực tối đa 5 phút.
 - Số ghim (5 cuộc trò chuyện) kiểm tra theo từng yêu cầu, chưa khóa nguyên tử nên có thể vượt nếu bấm đồng thời.
 - Tìm kiếm theo tên không phân biệt dấu cần kiểm thử với dữ liệu tên thật.
+- 2FA của ADMIN và ROOT: duyệt đăng nhập bằng chữ ký ECDSA P-256 trên điện thoại. Máy chủ chỉ giữ khóa công khai. Mỗi yêu cầu duyệt dùng một lần và hết hạn sau 2 phút.
+- Mã ghép thiết bị yêu cầu mật khẩu (và mã TOTP nếu đã bật 2FA), hết hạn sau 2 phút. Tắt 2FA, gỡ ghép trên web hoặc gỡ thiết bị trên app đều đăng xuất mọi phiên của tài khoản.
+- Các API 2FA có giới hạn tần suất theo tài khoản hoặc thiết bị. Bộ đếm lưu trong bộ nhớ nên mất khi khởi động lại.
+- `TOTP_KEY_*` không đưa vào repo. Triển khai thật phải dùng HTTPS.
 
 ## Giấy phép
 

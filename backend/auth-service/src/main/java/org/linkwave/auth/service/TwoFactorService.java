@@ -25,6 +25,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
@@ -58,6 +59,20 @@ public class TwoFactorService {
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(a -> a.equals("ROLE_ADMIN") || a.equals("ROLE_ROOT"));
         return privileged && secrets.findById(userId).map(TotpSecret::isEnabled).orElse(false);
+    }
+
+    public boolean isEnabled(Long userId) {
+        return secrets.findById(userId).map(TotpSecret::isEnabled).orElse(false);
+    }
+
+    public boolean hasSecret(Long userId) {
+        return secrets.existsById(userId);
+    }
+
+    /** Bí mật TOTP dạng base32 để otp-app dùng. Gồm cả bí mật đang chờ xác nhận. Chỉ gọi trong luồng ghép thiết bị. */
+    public Optional<String> exportSecretBase32(Long userId) {
+        return secrets.findById(userId)
+                .map(s -> TotpAlgorithm.base32Encode(crypto.decrypt(s.getSecretEncrypted(), s.getKeyVersion())));
     }
 
     @Transactional
@@ -152,7 +167,7 @@ public class TwoFactorService {
         return Check.INVALID;
     }
 
-    /** Tắt 2FA sau khi xác nhận bằng mã hiện tại. */
+    /** Tắt 2FA sau khi xác nhận bằng mã hiện tại. Controller chịu trách nhiệm đăng xuất mọi phiên sau khi tắt. */
     @Transactional
     public Check disable(Long userId, String rawCode) {
         final Check check = verifyLogin(userId, rawCode);

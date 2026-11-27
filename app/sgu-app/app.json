@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "SGU Chat",
+    "slug": "sgu-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f1f5f9"
+    },
+    "android": {
+      "package": "vn.edu.sgu.chat",
+      "edgeToEdgeEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "vn.edu.sgu.chat",
+      "supportsTablet": false
+    },
+    "plugins": ["expo-splash-screen"]
+  }
+}

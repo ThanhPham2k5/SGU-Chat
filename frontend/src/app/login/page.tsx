@@ -10,10 +10,18 @@ import { Notice } from "@/components/ui/Notice";
 import { TextField } from "@/components/ui/TextField";
 import { LINK } from "@/components/ui/styles";
 import { ApiError } from "@/lib/api/client";
-import { login, verifyTwoFactor } from "@/lib/auth/auth-api";
+import {
+    getOtpRequestStatus,
+    login,
+    startOtpRequest,
+    verifyTwoFactor,
+} from "@/lib/auth/auth-api";
+import type { OtpRequest } from "@/lib/auth/auth-api";
 import { isAdminUser } from "@/lib/auth/token";
 import { hasErrors, validateLogin } from "@/lib/auth/validation";
 import type { FieldErrors, LoginFields } from "@/lib/auth/validation";
+
+type OtpPhase = "waiting" | "rejected" | "expired";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -31,10 +39,49 @@ export default function LoginPage() {
         }
     }, []);
 
-    // Có giá trị khi ADMIN/ROOT đã bật 2FA: chuyển sang bước nhập mã
+    // Có giá trị khi ADMIN/ROOT đã bật 2FA: chuyển sang bước xác thực
     const [challenge, setChallenge] = useState<string | null>(null);
     const [code, setCode] = useState("");
     const [codeError, setCodeError] = useState<string | undefined>(undefined);
+
+    // Duyệt qua otp-app: có khi ADMIN/ROOT đã ghép thiết bị. Người dùng có thể chuyển sang mã TOTP.
+    const [otp, setOtp] = useState<OtpRequest | null>(null);
+    const [otpPhase, setOtpPhase] = useState<OtpPhase>("waiting");
+    const [useTotp, setUseTotp] = useState(false);
+
+    // Hỏi trạng thái mỗi 2 giây cho đến khi có kết quả
+    useEffect(() => {
+        if (!challenge || !otp || useTotp || otpPhase !== "waiting") return;
+        let cancelled = false;
+        const timer = window.setInterval(async () => {
+            try {
+                const status = await getOtpRequestStatus(challenge, otp.requestId);
+                if (cancelled) return;
+                if (status === "APPROVED") {
+                    window.clearInterval(timer);
+                    await verifyTwoFactor(challenge, { requestId: otp.requestId });
+                    if (!cancelled) finishSignIn();
+                } else if (status === "REJECTED") {
+                    window.clearInterval(timer);
+                    setOtpPhase("rejected");
+                } else if (status === "EXPIRED" || status === "CONSUMED") {
+                    window.clearInterval(timer);
+                    setOtpPhase("expired");
+                }
+            } catch (error) {
+                if (cancelled) return;
+                window.clearInterval(timer);
+                setServerError(describeTwoFactorError(error));
+                setOtpPhase("expired");
+            }
+        }, 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+        // finishSignIn chỉ dùng router và đọc localStorage, không cần đưa vào danh sách phụ thuộc
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [challenge, otp, useTotp, otpPhase]);
 
     function handleChange(event: ChangeEvent<HTMLInputElement>) {
         const { name, value } = event.target;
@@ -43,6 +90,19 @@ export default function LoginPage() {
 
     function finishSignIn() {
         router.replace(isAdminUser() ? "/admin" : "/chat");
+    }
+
+    async function requestOtp(nextChallenge: string) {
+        try {
+            const request = await startOtpRequest(nextChallenge);
+            setOtp(request);
+            setOtpPhase("waiting");
+            setUseTotp(request === null);
+        } catch {
+            // Không tạo được yêu cầu duyệt thì vẫn cho nhập mã TOTP
+            setOtp(null);
+            setUseTotp(true);
+        }
     }
 
     async function handleCredentials(event: FormEvent<HTMLFormElement>) {
@@ -60,6 +120,9 @@ export default function LoginPage() {
             const result = await login(fields.username.trim(), fields.password);
             if (result.kind === "twoFactor") {
                 setChallenge(result.challenge);
+                setCode("");
+                setCodeError(undefined);
+                await requestOtp(result.challenge);
                 setSubmitting(false);
                 return;
             }
@@ -84,7 +147,7 @@ export default function LoginPage() {
 
         setSubmitting(true);
         try {
-            await verifyTwoFactor(challenge, value);
+            await verifyTwoFactor(challenge, { code: value });
             finishSignIn();
         } catch (error) {
             setServerError(describeTwoFactorError(error));
@@ -92,11 +155,70 @@ export default function LoginPage() {
         }
     }
 
+    async function resendOtp() {
+        if (!challenge) return;
+        setServerError(null);
+        setOtpPhase("waiting");
+        await requestOtp(challenge);
+    }
+
     function backToCredentials() {
         setChallenge(null);
         setCode("");
         setCodeError(undefined);
         setServerError(null);
+        setOtp(null);
+        setUseTotp(false);
+        setOtpPhase("waiting");
+    }
+
+    if (challenge && otp && !useTotp) {
+        return (
+            <AuthLayout
+                title="Duyệt đăng nhập"
+                subtitle="Mở ứng dụng otp-app trên điện thoại và chọn đúng số bên dưới rồi bấm Approve."
+                footer={
+                    <div className="flex flex-col gap-2">
+                        <button type="button" onClick={() => setUseTotp(true)} className={`${LINK} cursor-pointer`}>
+                            Không nhận được yêu cầu? Nhập mã 6 số
+                        </button>
+                        <button type="button" onClick={backToCredentials} className={`${LINK} cursor-pointer`}>
+                            Quay lại đăng nhập
+                        </button>
+                    </div>
+                }
+            >
+                <div className="flex flex-col items-center gap-3 rounded-md border border-line bg-paper px-4 py-6">
+                    <span className="text-sm text-muted">Số đối chiếu</span>
+                    <span className="font-mono text-5xl font-semibold tracking-widest text-ink" aria-live="polite">
+                        {otp.number}
+                    </span>
+                </div>
+
+                {otpPhase === "waiting" ? (
+                    <p className="text-sm text-muted" aria-live="polite">Đang chờ bạn duyệt trên điện thoại...</p>
+                ) : null}
+
+                {otpPhase === "rejected" ? (
+                    <Notice
+                        text="Yêu cầu đã bị từ chối trên điện thoại. Nếu không phải bạn đăng nhập, hãy đổi mật khẩu ngay."
+                        tone="error"
+                    />
+                ) : null}
+
+                {otpPhase === "expired" && !serverError ? (
+                    <Notice text="Yêu cầu đã hết hạn. Hãy gửi lại yêu cầu." tone="error" />
+                ) : null}
+
+                {serverError ? <Notice text={serverError} tone="error" /> : null}
+
+                {otpPhase !== "waiting" ? (
+                    <Button onClick={resendOtp} disabled={submitting}>
+                        Gửi lại yêu cầu
+                    </Button>
+                ) : null}
+            </AuthLayout>
+        );
     }
 
     if (challenge) {
@@ -105,13 +227,16 @@ export default function LoginPage() {
                 title="Xác thực hai lớp"
                 subtitle="Nhập mã 6 số từ ứng dụng xác thực, hoặc một mã khôi phục chưa dùng."
                 footer={
-                    <button
-                        type="button"
-                        onClick={backToCredentials}
-                        className={`${LINK} cursor-pointer`}
-                    >
-                        Quay lại đăng nhập
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        {otp ? (
+                            <button type="button" onClick={() => setUseTotp(false)} className={`${LINK} cursor-pointer`}>
+                                Dùng ứng dụng otp-app để duyệt
+                            </button>
+                        ) : null}
+                        <button type="button" onClick={backToCredentials} className={`${LINK} cursor-pointer`}>
+                            Quay lại đăng nhập
+                        </button>
+                    </div>
                 }
             >
                 <form noValidate onSubmit={handleCode} className="flex flex-col gap-5" aria-busy={submitting}>

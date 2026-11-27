@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "SGU Approve",
+    "slug": "sgu-approve",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "vn.edu.sgu.otp",
+      "permissions": ["android.permission.CAMERA"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1f5fbf"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "vn.edu.sgu.otp"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        { "cameraPermission": "Cho phép dùng camera để quét mã QR ghép thiết bị." }
+      ]
+    ]
+  }
+}

@@ -43,9 +43,11 @@ public class ApiGatewayRouterConfig {
                                 "/api/v1/auth/2fa/setup",
                                 "/api/v1/auth/2fa/confirm",
                                 "/api/v1/auth/2fa/verify",
-                                "/api/v1/auth/2fa/disable")
+                                "/api/v1/auth/2fa/disable",
+                                "/api/v1/auth/2fa/otp/**",
+                                "/api/v1/auth/2fa/admin/**")
                         .and()
-                        .method(POST, GET, OPTIONS)
+                        .method(POST, GET, DELETE, OPTIONS)
                         .uri(AUTH_SERVICE.getUrl())
                 )
                 .route(r -> r

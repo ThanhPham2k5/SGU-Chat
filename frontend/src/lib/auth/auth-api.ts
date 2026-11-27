@@ -45,16 +45,112 @@ export async function login(username: string, password: string): Promise<LoginRe
     return { kind: "signedIn" };
 }
 
-/** Bước 2 khi đăng nhập: challenge (5 phút) cộng mã TOTP hoặc mã khôi phục. */
-export async function verifyTwoFactor(challenge: string, code: string): Promise<void> {
+/**
+ * Bước 2 khi đăng nhập. Gửi mã TOTP hoặc mã khôi phục (code), hoặc requestId đã được duyệt trên otp-app.
+ * Challenge còn hiệu lực 5 phút.
+ */
+export async function verifyTwoFactor(
+    challenge: string,
+    proof: { code?: string; requestId?: string },
+): Promise<void> {
     const body = await apiFetch<TokensResponse>("/api/v1/auth/2fa/verify", {
         method: "POST",
-        body: JSON.stringify({ challenge, code }),
+        body: JSON.stringify({ challenge, code: proof.code, requestId: proof.requestId }),
         skipAuth: true,
         skipRefresh: true,
     });
     setAccessToken(body.accessToken);
     setPasswordChangeRequired(body.passwordChangeRequired === true);
+}
+
+export type OtpRequest = { requestId: string; number: string; expiresAt: string };
+export type OtpRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONSUMED" | "EXPIRED";
+export type OtpPairing = { code: string; expiresAt: string };
+export type OtpDeviceStatus = {
+    paired: boolean;
+    totpEnabled: boolean;
+    deviceName: string | null;
+    pairedAt: string | null;
+};
+
+/**
+ * Sau khi đúng mật khẩu: tạo yêu cầu duyệt trên otp-app và nhận số đối chiếu 2 chữ số.
+ * Trả về null khi ADMIN/ROOT chưa ghép thiết bị (máy chủ trả 404), khi đó dùng mã TOTP.
+ */
+export async function startOtpRequest(challenge: string): Promise<OtpRequest | null> {
+    try {
+        return await apiFetch<OtpRequest>("/api/v1/auth/2fa/otp/requests", {
+            method: "POST",
+            body: JSON.stringify({ challenge }),
+            skipAuth: true,
+            skipRefresh: true,
+        });
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+            return null;
+        }
+        throw err;
+    }
+}
+
+/** Hỏi trạng thái yêu cầu duyệt. Web gọi định kỳ cho đến khi APPROVED, REJECTED hoặc EXPIRED. */
+export async function getOtpRequestStatus(challenge: string, requestId: string): Promise<OtpRequestStatus> {
+    const body = await apiFetch<{ status: OtpRequestStatus }>("/api/v1/auth/2fa/otp/requests/status", {
+        method: "POST",
+        body: JSON.stringify({ challenge, requestId }),
+        skipAuth: true,
+        skipRefresh: true,
+    });
+    return body.status;
+}
+
+/**
+ * Tạo mã ghép thiết bị cho otp-app (mã dùng một lần, 2 phút). Cần access token ADMIN/ROOT.
+ * Phải nhập đúng mật khẩu; nếu đã bật 2FA thì nhập thêm mã TOTP hiện tại.
+ */
+export function createOtpPairing(input: { password: string; code?: string }): Promise<OtpPairing> {
+    return apiFetch<OtpPairing>("/api/v1/auth/2fa/otp/pairing", {
+        method: "POST",
+        body: JSON.stringify({ password: input.password, code: input.code || undefined }),
+    });
+}
+
+export function getOtpDevice(): Promise<OtpDeviceStatus> {
+    return apiFetch<OtpDeviceStatus>("/api/v1/auth/2fa/otp/device");
+}
+
+/** Gỡ ghép. Máy chủ đăng xuất mọi phiên của tài khoản, nên web phải đưa người dùng về trang đăng nhập. */
+export function unpairOtpDevice(): Promise<void> {
+    return apiFetch<void>("/api/v1/auth/2fa/otp/device", { method: "DELETE" });
+}
+
+export type TwoFactorReset = {
+    userId: number;
+    username: string;
+    requestedAt: string;
+    executeAfter: string;
+};
+
+/** ROOT (đã xác thực 2FA): danh sách yêu cầu đặt lại 2FA của ADMIN đang chờ. */
+export function listTwoFactorResets(): Promise<TwoFactorReset[]> {
+    return apiFetch<TwoFactorReset[]>("/api/v1/auth/2fa/admin/resets");
+}
+
+/** ROOT yêu cầu đặt lại 2FA cho một ADMIN. Có hiệu lực sau 24 giờ, trừ khi bị hủy. */
+export function requestTwoFactorReset(username: string): Promise<void> {
+    return apiFetch<void>("/api/v1/auth/2fa/admin/resets", {
+        method: "POST",
+        body: JSON.stringify({ username }),
+    });
+}
+
+/** Thực hiện đặt lại khi đã hết thời gian chờ. Xóa 2FA, ghép thiết bị và đăng xuất tài khoản đó. */
+export function executeTwoFactorReset(userId: number): Promise<void> {
+    return apiFetch<void>(`/api/v1/auth/2fa/admin/resets/${userId}/execute`, { method: "POST" });
+}
+
+export function cancelTwoFactorReset(userId: number): Promise<void> {
+    return apiFetch<void>(`/api/v1/auth/2fa/admin/resets/${userId}`, { method: "DELETE" });
 }
 
 /** Tạo bí mật mới. Cần access token của ADMIN/ROOT. */
