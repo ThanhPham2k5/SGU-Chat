@@ -167,6 +167,18 @@ public class TwoFactorService {
         return Check.INVALID;
     }
 
+    /**
+     * Gỡ ghép thiết bị thì tắt luôn 2FA: xóa bí mật TOTP và mã khôi phục.
+     * Lý do: sau khi gỡ, không còn thiết bị nào để tạo mã, nên giữ 2FA sẽ khóa tài khoản.
+     * Không đăng xuất ở đây, để nơi gọi quyết định.
+     */
+    @Transactional
+    public void clearForUnpair(Long userId) {
+        secrets.findById(userId).ifPresent(secrets::delete);
+        recoveryCodes.deleteByUserId(userId);
+        audit(userId, "2FA_CLEARED_BY_UNPAIR");
+    }
+
     /** Tắt 2FA sau khi xác nhận bằng mã hiện tại. Controller chịu trách nhiệm đăng xuất mọi phiên sau khi tắt. */
     @Transactional
     public Check disable(Long userId, String rawCode) {

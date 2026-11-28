@@ -175,6 +175,7 @@ public class OtpService {
     public void unpair(Long userId) {
         devices.findById(userId).ifPresent(devices::delete);
         expirePending(userId);
+        twoFactor.clearForUnpair(userId);
         userService.logoutAllDevices(userId);
         audit(userId, "OTP_UNPAIRED");
     }
@@ -190,6 +191,7 @@ public class OtpService {
         final Long userId = device.getUserId();
         devices.delete(device);
         expirePending(userId);
+        twoFactor.clearForUnpair(userId);
         userService.logoutAllDevices(userId);
         audit(userId, "OTP_REVOKED_BY_APP");
     }

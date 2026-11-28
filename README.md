@@ -156,6 +156,20 @@ npm run dev        # http://localhost:3000
 
 Lập trình viên tự tạo tài khoản root trong môi trường local. Đổi mật khẩu ngay sau lần đăng nhập đầu tiên.
 
+### 5. Chạy ứng dụng duyệt đăng nhập (otp-app)
+
+Ứng dụng SGU Approve nằm ở `app/otp-app`, chạy trên Android. Chi tiết xem `app/otp-app/README.md`.
+
+```bash
+cd app/otp-app
+npm install
+npx expo install expo-build-properties   # lần đầu
+adb reverse tcp:8080 tcp:8080            # chạy qua USB
+npx expo run:android
+```
+
+Trên Windows, nếu `adb` không được nhận dạng, dùng đường dẫn đầy đủ tới `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`. Để chạy không cần USB, đặt `EXPO_PUBLIC_API_URL=http://<IP máy>:8080` trong `.env` của app (xem README của app).
+
 ## Database Schema Migration (Flyway)
 A. Cách hoạt động
 - Flyway được tích hợp tại User Service.
@@ -266,7 +280,7 @@ Sau khi reset, database vẫn giữ nguyên schema và có thể tiếp tục ho
 - Số ghim (5 cuộc trò chuyện) kiểm tra theo từng yêu cầu, chưa khóa nguyên tử nên có thể vượt nếu bấm đồng thời.
 - Tìm kiếm theo tên không phân biệt dấu cần kiểm thử với dữ liệu tên thật.
 - 2FA của ADMIN và ROOT: duyệt đăng nhập bằng chữ ký ECDSA P-256 trên điện thoại. Máy chủ chỉ giữ khóa công khai. Mỗi yêu cầu duyệt dùng một lần và hết hạn sau 2 phút.
-- Mã ghép thiết bị yêu cầu mật khẩu (và mã TOTP nếu đã bật 2FA), hết hạn sau 2 phút. Tắt 2FA, gỡ ghép trên web hoặc gỡ thiết bị trên app đều đăng xuất mọi phiên của tài khoản.
+- Mã ghép thiết bị yêu cầu mật khẩu (và mã TOTP nếu đã bật 2FA), hết hạn sau 2 phút. Tắt 2FA, gỡ ghép trên web hoặc gỡ thiết bị trên app đều tắt 2FA và đăng xuất mọi phiên của tài khoản.
 - Các API 2FA có giới hạn tần suất theo tài khoản hoặc thiết bị. Bộ đếm lưu trong bộ nhớ nên mất khi khởi động lại.
 - `TOTP_KEY_*` không đưa vào repo. Triển khai thật phải dùng HTTPS.
 

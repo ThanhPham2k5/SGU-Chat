@@ -106,7 +106,7 @@ export function OtpPairingPanel({ onEnabled }: { onEnabled?: () => void }) {
     }
 
     async function unpair() {
-        if (!window.confirm("Gỡ ghép thiết bị? Mọi phiên đăng nhập của tài khoản sẽ bị đăng xuất.")) return;
+        if (!window.confirm("Gỡ ghép thiết bị? Thao tác này tắt 2FA và đăng xuất mọi phiên của tài khoản.")) return;
         setBusy(true);
         setNotice(null);
         try {
@@ -135,7 +135,7 @@ export function OtpPairingPanel({ onEnabled }: { onEnabled?: () => void }) {
                     </p>
                     <p className={HELP}>
                         Xóa otp-app trên điện thoại mà chưa gỡ ở đây thì vẫn bị đòi duyệt. Gỡ ghép ở đây hoặc trong otp-app
-                        đều đăng xuất tài khoản.
+                        đều tắt 2FA và đăng xuất tài khoản.
                     </p>
                     <Button variant="danger" size="sm" onClick={unpair} disabled={busy} className="self-start">
                         Gỡ ghép thiết bị

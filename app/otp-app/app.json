@@ -21,6 +21,10 @@
       [
         "expo-camera",
         { "cameraPermission": "Cho phép dùng camera để quét mã QR ghép thiết bị." }
+      ],
+      [
+        "expo-build-properties",
+        { "android": { "usesCleartextTraffic": true } }
       ]
     ]
   }

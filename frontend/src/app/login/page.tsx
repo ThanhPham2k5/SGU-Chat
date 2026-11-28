@@ -51,7 +51,8 @@ export default function LoginPage() {
 
     // Hỏi trạng thái mỗi 2 giây cho đến khi có kết quả
     useEffect(() => {
-        if (!challenge || !otp || useTotp || otpPhase !== "waiting") return;
+        // Hỏi trạng thái cả khi đang ở tab nhập mã 6 số, để duyệt trên app vẫn tự chuyển trang
+        if (!challenge || !otp || otpPhase !== "waiting") return;
         let cancelled = false;
         const timer = window.setInterval(async () => {
             try {
@@ -81,7 +82,7 @@ export default function LoginPage() {
         };
         // finishSignIn chỉ dùng router và đọc localStorage, không cần đưa vào danh sách phụ thuộc
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [challenge, otp, useTotp, otpPhase]);
+    }, [challenge, otp, otpPhase]);
 
     function handleChange(event: ChangeEvent<HTMLInputElement>) {
         const { name, value } = event.target;

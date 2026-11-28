@@ -133,7 +133,7 @@ export function HomeScreen({ devices, onEnrolled, onUnlink, onAddAccount }: Prop
   function confirmUnlink(device: StoredDevice) {
     Alert.alert(
       `Xoá ${device.account || 'tài khoản'} khỏi điện thoại?`,
-      'Ứng dụng sẽ gỡ thiết bị trên máy chủ rồi xoá khóa khỏi điện thoại. Mọi phiên đăng nhập của tài khoản này sẽ bị đăng xuất.',
+      'Ứng dụng sẽ gỡ thiết bị trên máy chủ rồi xoá khóa khỏi điện thoại. Mọi phiên đăng nhập của tài khoản này sẽ bị đăng xuất và 2FA sẽ bị tắt.',
       [
         { text: 'Huỷ', style: 'cancel' },
         { text: 'Xoá', style: 'destructive', onPress: () => unlink(device) },

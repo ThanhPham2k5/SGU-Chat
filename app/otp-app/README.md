@@ -48,8 +48,8 @@ Nhập sai 5 lần liên tiếp, tài khoản bị khóa 5 phút.
 
 ### 1.5. Gỡ ghép và xóa thiết bị
 
-- **Gỡ trên app:** bấm **Xoá khỏi điện thoại** ở thẻ tài khoản rồi xác nhận. App gỡ thiết bị trên máy chủ rồi mới xóa khóa trên điện thoại. Mọi phiên đăng nhập của tài khoản đó sẽ bị đăng xuất.
-- **Gỡ trên web:** vào **Bảo mật > Xác thực hai lớp > Gỡ ghép thiết bị**. Mọi phiên cũng bị đăng xuất.
+- **Gỡ trên app:** bấm **Xoá khỏi điện thoại** ở thẻ tài khoản rồi xác nhận. App gỡ thiết bị trên máy chủ rồi mới xóa khóa trên điện thoại. Mọi phiên đăng nhập của tài khoản đó sẽ bị đăng xuất, và 2FA của tài khoản bị tắt.
+- **Gỡ trên web:** vào **Bảo mật > Xác thực hai lớp > Gỡ ghép thiết bị**. Mọi phiên cũng bị đăng xuất và 2FA bị tắt. Muốn dùng lại thì bật 2FA và ghép thiết bị từ đầu (mục 1.2).
 
 > Chỉ xóa app trên điện thoại mà chưa gỡ trên web, web vẫn đòi duyệt qua thiết bị đó. Vì vậy hãy gỡ ghép trước khi xóa app.
 
@@ -57,7 +57,7 @@ Nếu mất mạng khi bấm Xoá, app báo "chưa gỡ được trên máy ch�
 
 ### 1.6. Mất điện thoại hoặc mất dữ liệu app
 
-- **Còn 8 mã khôi phục:** đăng nhập bằng một mã khôi phục ở bước 2FA, vào **Xác thực hai lớp**, bấm **Gỡ ghép thiết bị**. Sau đó đăng nhập lại và ghép thiết bị mới như mục 1.2.
+- **Còn 8 mã khôi phục:** đăng nhập bằng một mã khôi phục ở bước 2FA, vào **Xác thực hai lớp**, bấm **Gỡ ghép thiết bị** (việc này tắt 2FA). Sau đó bật 2FA và ghép thiết bị mới như mục 1.2.
 - **Không còn mã khôi phục:** ADMIN nhờ ROOT khác đặt lại 2FA (mục 1.7). ROOT không tự đặt lại cho chính mình, và không đặt lại được cho ROOT khác bằng tính năng này. Khi đó cần quản trị viên cơ sở dữ liệu xử lý.
 
 ### 1.7. Đặt lại 2FA cho ADMIN (dành cho ROOT)
@@ -85,6 +85,7 @@ Nếu mất mạng khi bấm Xoá, app báo "chưa gỡ được trên máy ch�
 cd otp-app
 npm install
 npx expo install expo expo-camera expo-secure-store expo-local-authentication react react-native
+npx expo install expo-build-properties
 ```
 
 Lệnh `npx expo install` chọn đúng phiên bản tương thích SDK. Không dùng `npm install` cho các package Expo, vì có thể lệch phiên bản.
@@ -99,7 +100,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8080
 
 - Chạy trên điện thoại qua USB và `adb reverse`: giữ `localhost:8080`.
 - Chạy trên máy ảo Android Studio: vẫn dùng `adb reverse tcp:8080 tcp:8080`, không dùng `10.0.2.2`.
-- Chạy qua Wi-Fi: đặt `http://<IP máy tính>:8080`, máy tính và điện thoại cùng mạng.
+- Chạy qua Wi-Fi (không cần USB): điện thoại và máy chạy backend phải cùng mạng. Tìm IP máy chạy backend bằng `ipconfig` (IPv4 của Wi-Fi), rồi đặt `EXPO_PUBLIC_API_URL=http://<IP>:8080`. Cổng 8080 phải được phép qua tường lửa Windows. Đổi mạng hoặc đổi IP thì phải sửa `.env` và build lại.
 
 ### 2.4. Chạy
 
@@ -108,7 +109,24 @@ adb reverse tcp:8080 tcp:8080
 npx expo run:android
 ```
 
+Trên Windows, nếu PowerShell báo `adb` không được nhận dạng, dùng đường dẫn đầy đủ:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:8080 tcp:8080
+```
+
+Kiểm tra bằng `adb reverse --list`. Kết quả phải có `tcp:8080 tcp:8080`.
+
 `npx expo run:android` build và cài đè lên app cũ, không làm mất dữ liệu (khóa) đã lưu. Dữ liệu chỉ mất khi gỡ app, xóa dữ liệu app, đổi `package` hoặc đổi key ký.
+
+**Dùng không cần USB:** build bản release (JavaScript đóng gói sẵn trong app, không cần Metro):
+
+```bash
+npx expo install expo-build-properties   # chỉ lần đầu
+npx expo run:android --variant release
+```
+
+Cài một lần bằng USB. Sau đó app chạy độc lập, miễn là điện thoại và backend cùng mạng. Biến `EXPO_PUBLIC_API_URL` được gắn vào lúc build, nên đổi `.env` thì phải build lại.
 
 Khi chỉ sửa JavaScript, chạy `npx expo start` rồi mở app đã cài. Nếu gặp lỗi `Cannot find native module`, chạy lại `npx expo run:android`.
 
@@ -199,9 +217,24 @@ Kịch bản đầy đủ nằm ở tài liệu test riêng. Tối thiểu cần
 - Bí mật TOTP mã hóa AES-GCM trên máy chủ bằng khóa `TOTP_KEY_*` (lưu trong biến môi trường, không đưa vào repo).
 - Triển khai thật phải dùng HTTPS.
 
+## Xử lý lỗi thường gặp (dành cho lập trình viên)
+
+| Lỗi | Nguyên nhân và cách sửa |
+|---|---|
+| `adb` không được nhận dạng | Dùng đường dẫn đầy đủ tới `adb.exe` (xem mục 2.4). |
+| `Cannot find native module 'ExpoLocalAuthentication'` | Bản app đã cài thiếu module native. Chạy `npx expo run:android` để build và cài đè. |
+| `PluginError: Failed to resolve plugin for module "expo-build-properties"` | Chưa cài package. Chạy `npx expo install expo-build-properties`. |
+| `Unable to resolve module ...` hoặc lỗi 500 từ Metro | Thiếu package trong `node_modules`. Chạy `npx expo install <tên package>` rồi `npx expo start -c`. |
+| `Port 8083 became busy` | Còn tiến trình Metro cũ. Tắt tiến trình đang giữ cổng, hoặc chạy `npx expo start --port <cổng khác>`. |
+| `ERR_ADDRESS_UNREACHABLE` khi chạy qua Wi-Fi | Tường lửa chặn cổng 8080, router bật cách ly thiết bị không dây, hoặc điện thoại khác mạng. Dùng USB và `adb reverse` để test. |
+| `Mã ghép không đúng hoặc đã hết hạn` | Mã đã quá 2 phút hoặc đã dùng. Tạo mã mới trên web. |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Keystore khác với bản đã cài. Không gỡ app nếu còn muốn giữ thiết bị. Build trên đúng máy đã cài lần đầu. |
+
 ## Giới hạn đã biết
 
 - iOS chưa được kiểm thử.
+- Xóa app hoặc đổi keystore làm mất khóa trên điện thoại. Khi đó phải gỡ ghép trên web rồi ghép lại (mục 1.6).
+- Gỡ ghép cũng tắt 2FA. Từ lúc gỡ đến khi bật lại, tài khoản chỉ được bảo vệ bằng mật khẩu.
 - Bí mật TOTP được lưu trong kho bảo mật của thiết bị để dùng khi không có mạng. Ai mở được điện thoại đã khóa cùng lúc có khóa duyệt và mã dự phòng. Đây là đánh đổi đã chấp nhận.
 - Nếu tài khoản ROOT bị chiếm, người đó vẫn có thể yêu cầu đặt lại 2FA cho ADMIN (sau thời gian chờ). Thông báo cho ADMIN khi có yêu cầu chưa được triển khai.
 - Tính năng đặt lại 2FA không áp dụng cho ROOT. Trường hợp mất cả hai ROOT cần quản trị viên cơ sở dữ liệu.
