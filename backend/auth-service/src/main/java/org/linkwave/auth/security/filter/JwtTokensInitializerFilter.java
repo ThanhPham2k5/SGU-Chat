@@ -43,6 +43,7 @@ import org.linkwave.auth.security.DefaultUserDetails;
 import org.linkwave.auth.security.LoginAttemptService;
 import org.linkwave.auth.security.totp.ChallengeService;
 import org.linkwave.auth.service.TwoFactorService;
+import org.linkwave.auth.security.utils.MobileClient;
 import org.linkwave.auth.service.UserService;
 import java.util.Map;
 
@@ -187,7 +188,8 @@ public class JwtTokensInitializerFilter extends OncePerRequestFilter {
 
         @Cleanup final var outputStream = response.getOutputStream();
         final var tokensDto = new TokensDto(refreshToken.expireAt(), jwtAccessSerializer.serialize(accessToken),
-                userService.requiresPasswordChange(refreshToken.userId()));
+                userService.requiresPasswordChange(refreshToken.userId()),
+                MobileClient.isMobile(request) ? serializedRefreshToken : null);
         objectMapper.writeValue(outputStream, tokensDto);
         outputStream.flush();
     }

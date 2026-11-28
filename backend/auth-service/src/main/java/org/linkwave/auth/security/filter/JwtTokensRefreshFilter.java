@@ -11,6 +11,7 @@ import org.linkwave.auth.dto.TokensDto;
 import org.linkwave.auth.entity.DeactivatedToken;
 import org.linkwave.auth.repository.DeactivatedTokenRepository;
 import org.linkwave.auth.security.jwt.*;
+import org.linkwave.auth.security.utils.MobileClient;
 import org.linkwave.auth.service.UserService;
 import org.linkwave.shared.auth.JwtAccessSerializer;
 import org.linkwave.shared.dto.ApiError;
@@ -78,14 +79,21 @@ public class JwtTokensRefreshFilter extends OncePerRequestFilter {
                         ? request.getCookies() : new Cookie[0])
                 .filter(cookie -> cookie.getName().equals(REFRESH_TOKEN))
                 .findAny();
+        // app di động không có cookie: đọc refresh token từ header
+        final String headerToken = request.getHeader(MobileClient.REFRESH_TOKEN_HEADER);
+        final boolean mobile = MobileClient.isMobile(request);
 
         try {
 
-            if (optionalCookie.isEmpty()) {
+            final String refreshToken;
+            if (optionalCookie.isPresent()) {
+                refreshToken = optionalCookie.get().getValue();
+            } else if (headerToken != null && !headerToken.isBlank()) {
+                refreshToken = headerToken.trim();
+            } else {
                 throw new CredentialsExpiredException("Refresh token is not present");
             }
 
-            final String refreshToken = optionalCookie.get().getValue();
             final Token token = jwtRefreshParser.parse(refreshToken);
 
             if (token == null || tokenRepository.existsById(token.id())) {
@@ -132,7 +140,8 @@ public class JwtTokensRefreshFilter extends OncePerRequestFilter {
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
             final var tokensDto = new TokensDto(newRefreshToken.expireAt(), jwtAccessSerializer.serialize(accessToken),
-                    userService.requiresPasswordChange(token.userId()));
+                    userService.requiresPasswordChange(token.userId()),
+                    mobile ? serializedRefreshToken : null);
             objectMapper.writeValue(response.getOutputStream(), tokensDto);
 
         } catch (CredentialsExpiredException | AccessDeniedException |

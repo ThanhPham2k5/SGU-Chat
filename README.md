@@ -5,9 +5,9 @@ Chat nội bộ cho Đại học Sài Gòn, kiểu Zalo: chat riêng, nhóm lớ
 ## Tính năng
 
 - **Chat**: chat riêng, nhóm tự tạo, nhóm lớp, nhóm môn, nhóm khoa. Mọi thành viên nhóm phải chấp nhận lời mời. Ghim tối đa 5 cuộc trò chuyện, lọc theo loại, tìm người để nhắn riêng theo tên hoặc mã.
-- **Tin nhắn**: gửi nhiều tệp cùng lúc, thư viện ảnh và tệp của từng cuộc trò chuyện, xóa tin (tác giả hoặc admin nhóm). Liên kết cần xác nhận trước khi mở.
+- **Tin nhắn**: gửi nhiều tệp cùng lúc, thư viện ảnh và tệp của từng cuộc trò chuyện, xóa tin (tác giả hoặc admin nhóm), sửa tin chữ đã gửi (có nhãn đã chỉnh sửa). Liên kết cần xác nhận trước khi mở. Đổi tên nhóm cập nhật realtime cho các thành viên khác.
 - **Bot**: `/tkb` (thời khóa biểu), `/lichthi`, `/lop`, `/lichgac`.
-- **Tài khoản**: hồ sơ, đổi số điện thoại và địa chỉ, đổi mật khẩu, đăng xuất mọi thiết bị.
+- **Tài khoản**: hồ sơ, đổi số điện thoại và địa chỉ, đổi mật khẩu, đăng xuất mọi thiết bị. Ứng dụng di động giữ phiên bằng refresh token lưu trên máy; web dùng cookie.
 - **Xác thực hai lớp (2FA)**: bật cho ADMIN và ROOT. Duyệt đăng nhập bằng ứng dụng SGU Approve trên điện thoại (`app/otp-app`), có mã 6 số dự phòng và 8 mã khôi phục. ROOT có thể đặt lại 2FA cho ADMIN sau thời gian chờ.
 - **Quản trị học vụ**: import Excel (khoa, lớp, sinh viên, giảng viên, thời khóa biểu, học kỳ, môn học, lịch thi, lịch gác thi), đồng bộ nhóm học vụ theo bấm nút, quản lý người dùng, vai trò, phân quyền, báo cáo tin nhắn, nhật ký hệ thống.
 
@@ -47,6 +47,7 @@ frontend/
   src/app/        Các trang (chat, admin, account, login, change-password, security/2fa)
   src/components/ Giao diện theo khu vực; components/ui là bộ thành phần dùng chung
   src/lib/        Gọi API, WebSocket, định dạng dữ liệu
+app/sgu-app/    Ứng dụng chat trên Android. Xem app/sgu-app/README.md
 app/otp-app/     Ứng dụng SGU Approve (Android). Xem app/otp-app/README.md
 test-data/        9 file Excel mẫu để import (xem bên dưới)
 scripts/reset/    Script xóa dữ liệu (chỉ chạy khi cần, xem bên dưới)

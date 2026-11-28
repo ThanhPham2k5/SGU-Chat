@@ -2,7 +2,7 @@
 
 Thư mục này chứa hai ứng dụng di động:
 
-- `sgu-app/`: ứng dụng chat (tương đương giao diện web). Dùng cùng backend với web qua api-gateway.
+- `sgu-app/`: ứng dụng chat trên Android (tương đương giao diện web, trừ thông báo đẩy). Dùng cùng backend với web qua api-gateway. Xem `sgu-app/README.md`.
 - `otp-app/`: ứng dụng xác thực riêng, dùng để nhận mã OTP 6 số và duyệt (Approve) hoặc từ chối (Reject) đăng nhập. Không dùng chung mã với `sgu-app`.
 
 ## Công nghệ
@@ -17,18 +17,6 @@ Thư mục này chứa hai ứng dụng di động:
 - Android Studio (để có Android SDK và giả lập, hoặc chỉ cần `adb` nếu dùng điện thoại thật).
 - Điện thoại Android đã bật USB debugging, hoặc giả lập đã tạo sẵn.
 - Backend SGU Chat đang chạy (xem `backend/` và README gốc).
-
-## Tạo project Expo lần đầu
-
-Chạy trong thư mục `app/` trên máy của bạn (môi trường này không tải được npm):
-
-```powershell
-cd D:\Project\SGU-Chat\app
-npx create-expo-app@latest sgu-app --template blank-typescript
-npx create-expo-app@latest otp-app --template blank-typescript
-```
-
-Sau đó giữ lại file README riêng của từng app trong `sgu-app/` và `otp-app/` (lệnh trên có thể ghi đè README mặc định, nên sao lưu trước nếu cần).
 
 ## Chạy trên điện thoại Android cắm USB
 
@@ -50,6 +38,6 @@ Mỗi app đọc địa chỉ backend từ biến môi trường `EXPO_PUBLIC_AP
 
 | Nội dung | Android | iOS |
 |---|---|---|
-| sgu-app: đăng nhập, danh sách chat, gửi tin | Cần kiểm thử | Chưa kiểm thử |
+| sgu-app: đăng nhập, giữ phiên, danh sách chat, gửi, sửa, thu hồi tin, nhóm | Cần kiểm thử | Chưa kiểm thử |
 | otp-app: nhận OTP 6 số | Cần kiểm thử | Chưa kiểm thử |
 | otp-app: duyệt Approve/Reject | Chờ backend hoàn thiện | Chưa kiểm thử |

@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { ChatSummary } from "./src/api/chats";
 import { chatSocket } from "./src/api/chatSocket";
+import { setSessionExpiredHandler } from "./src/api/client";
 import { getMyUserId } from "./src/api/session";
 import { getAccessToken } from "./src/storage/tokens";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -18,11 +20,30 @@ export default function App() {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [myId, setMyId] = useState<number | null>(null);
   const [openChat, setOpenChat] = useState<ChatSummary | null>(null);
+  const signedInRef = useRef(false);
 
   useEffect(() => {
     getAccessToken()
       .then((token) => setStatus(token ? "signedIn" : "signedOut"))
       .catch(() => setStatus("signedOut"));
+  }, []);
+
+  useEffect(() => {
+    signedInRef.current = status === "signedIn";
+  }, [status]);
+
+  // Phiên hết hạn và không gia hạn được: về màn đăng nhập, chỉ báo một lần.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      if (!signedInRef.current) return;
+      signedInRef.current = false;
+      setOpenChat(null);
+      setMyId(null);
+      setMustChangePassword(false);
+      setStatus("signedOut");
+      Alert.alert("Phiên đăng nhập đã hết hạn", "Vui lòng đăng nhập lại.");
+    });
+    return () => setSessionExpiredHandler(null);
   }, []);
 
   const ready = status === "signedIn" && !mustChangePassword;

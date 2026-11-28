@@ -20,6 +20,7 @@ export type RealtimeEvent =
   | { type: "historyCleared"; chatId: string }
   | { type: "chatDeleted"; chatId: string }
   | { type: "membership" }
+  | { type: "renamed"; chatId: string }
   | { type: "reconnected" };
 
 type Listener = (event: RealtimeEvent) => void;
@@ -55,6 +56,8 @@ function toEvent(data: Record<string, unknown>): RealtimeEvent | null {
         contentType: str(data.contentType),
         size: Number(data.size) || 0,
       };
+    case "RENAME":
+      return { type: "renamed", chatId: String(data.chatId) };
     case "REMOVE":
       return { type: "removed", chatId: String(data.chatId), id: String(data.id), timestamp: str(data.timestamp) };
     case "UPD_MESSAGE":
@@ -139,6 +142,30 @@ class ChatSocketClient {
   sendFile(chatId: string, file: CreatedFile): boolean {
     if (!this.isOpen() || !this.ws) return false;
     this.ws.send(`path=/chat/${chatId}/send_file\n\n${JSON.stringify(file)}`);
+    return true;
+  }
+
+  /** Sửa tin chữ: server phát UPD_MESSAGE tới cả đoạn chat. Route nhận payload là chuỗi thuần. */
+  editMessage(messageId: string, text: string): boolean {
+    if (!this.isOpen() || !this.ws) return false;
+    this.ws.send(`path=/chat/edit_text_message/${encodeURIComponent(messageId)}\n\n${text}`);
+    return true;
+  }
+
+  /** Thu hồi tin nhắn: server phát REMOVE tới cả đoạn chat. */
+  removeMessage(messageId: string): boolean {
+    if (!this.isOpen() || !this.ws) return false;
+    this.ws.send(`path=/chat/remove_message/${encodeURIComponent(messageId)}\n\n{}`);
+    return true;
+  }
+
+  /**
+   * Ẩn đoạn chat với người dùng hiện tại: server chỉ gửi lại tin sau thời điểm này cho mình.
+   * Trả về false nếu chưa kết nối realtime (khi đó gọi REST thay thế).
+   */
+  clearHistory(chatId: string): boolean {
+    if (!this.isOpen() || !this.ws) return false;
+    this.ws.send(`path=/chat/${encodeURIComponent(chatId)}/clear_history\n\n{}`);
     return true;
   }
 

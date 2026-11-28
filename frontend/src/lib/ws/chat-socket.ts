@@ -219,6 +219,8 @@ export class ChatSocket {
             case "LEAVE":
             case "ADD":
             case "SET_ROLE":
+            // Đổi tên nhóm: tải lại danh sách để cập nhật tên ngay, không cần refresh
+            case "RENAME":
                 this.handlers.onChatEvent({
                     type: "membership",
                     conversationId: String(data.chatId),

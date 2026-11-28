@@ -15,6 +15,7 @@ import org.linkwave.auth.security.jwt.JwtRefreshSerializer;
 import org.linkwave.auth.security.jwt.RefreshTokenFactory;
 import org.linkwave.auth.security.jwt.RefreshTokenFactoryImpl;
 import org.linkwave.auth.security.totp.ChallengeService;
+import org.linkwave.auth.security.utils.MobileClient;
 import org.linkwave.auth.service.OtpService;
 import org.linkwave.auth.service.TwoFactorService;
 import org.linkwave.shared.auth.JwtAccessSerializer;
@@ -90,7 +91,8 @@ public class TwoFactorController {
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<TokensDto> verify(@RequestBody @Valid VerifyRequest body) {
+    public ResponseEntity<TokensDto> verify(@RequestBody @Valid VerifyRequest body,
+                                                 HttpServletRequest request) {
         final Long userId = challenges.verify(body.challenge());
         if (body.requestId() != null && !body.requestId().isBlank()) {
             otp.consumeApproved(userId, body.requestId());
@@ -113,14 +115,16 @@ public class TwoFactorController {
         final Token refreshToken = org.linkwave.auth.security.utils.TokenAuthorities.withMfa(
                 refreshTokenFactory.build(authentication), true);
         final Token accessToken = accessTokenFactory.build(refreshToken);
+        final String serializedRefreshToken = refreshSerializer.serialize(refreshToken);
         final ResponseCookie cookie = createRefreshCookie(
-                refreshSerializer.serialize(refreshToken),
+                serializedRefreshToken,
                 Duration.between(refreshToken.createdAt(), refreshToken.expireAt()));
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(new TokensDto(refreshToken.expireAt(), accessSerializer.serialize(accessToken),
-                        userRepository.findById(userId).map(User::isMustChangePassword).orElse(false)));
+                        userRepository.findById(userId).map(User::isMustChangePassword).orElse(false),
+                        MobileClient.isMobile(request) ? serializedRefreshToken : null));
     }
 
     private Token requirePrivilegedToken(HttpServletRequest request) {

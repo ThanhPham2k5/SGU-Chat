@@ -1,18 +1,25 @@
-import { forwardRef, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TextInputInstance,
   TextInputProps,
+  ScrollViewInstance,
   View,
 } from "react-native";
-import { login, verifyTwoFactor } from "../api/auth";
+import {
+  getOtpRequestStatus,
+  login,
+  startOtpRequest,
+  verifyTwoFactor,
+} from "../api/auth";
+import type { OtpRequest } from "../api/auth";
 import { colors } from "../theme";
 
 type Props = {
@@ -21,7 +28,7 @@ type Props = {
 
 type FieldProps = TextInputProps & { label: string };
 
-const Field = forwardRef<TextInput, FieldProps>(function Field({ label, ...inputProps }, ref) {
+const Field = forwardRef<TextInputInstance, FieldProps>(function Field({ label, ...inputProps }, ref) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -29,6 +36,8 @@ const Field = forwardRef<TextInput, FieldProps>(function Field({ label, ...input
     </View>
   );
 });
+
+type OtpPhase = "waiting" | "rejected" | "expired";
 
 export default function LoginScreen({ onSignedIn }: Props) {
   const [username, setUsername] = useState("");
@@ -38,12 +47,68 @@ export default function LoginScreen({ onSignedIn }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const scrollRef = useRef<ScrollView>(null);
-  const passwordRef = useRef<TextInput>(null);
+  // Duyệt qua otp-app: có khi ADMIN/ROOT đã ghép thiết bị. Có thể chuyển sang mã TOTP.
+  const [otp, setOtp] = useState<OtpRequest | null>(null);
+  const [otpPhase, setOtpPhase] = useState<OtpPhase>("waiting");
+  const [useTotp, setUseTotp] = useState(false);
+
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+
+  // Giữ hàm mới nhất để effect polling không phải khởi động lại mỗi lần render.
+  const onSignedInRef = useRef(onSignedIn);
+  useEffect(() => {
+    onSignedInRef.current = onSignedIn;
+  }, [onSignedIn]);
+
+  // Hỏi trạng thái mỗi 2 giây cho đến khi có kết quả. Vẫn chạy khi đang ở tab nhập mã.
+  useEffect(() => {
+    if (!challenge || !otp || otpPhase !== "waiting") return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const status = await getOtpRequestStatus(challenge, otp.requestId);
+        if (cancelled) return;
+        if (status === "APPROVED") {
+          clearInterval(timer);
+          const result = await verifyTwoFactor(challenge, { requestId: otp.requestId });
+          if (!cancelled) onSignedInRef.current(result.passwordChangeRequired);
+        } else if (status === "REJECTED") {
+          clearInterval(timer);
+          setOtpPhase("rejected");
+        } else if (status === "EXPIRED" || status === "CONSUMED") {
+          clearInterval(timer);
+          setOtpPhase("expired");
+        }
+      } catch (err) {
+        if (cancelled) return;
+        clearInterval(timer);
+        setError(err instanceof Error ? err.message : "Không kiểm tra được yêu cầu duyệt.");
+        setOtpPhase("expired");
+      }
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [challenge, otp, otpPhase]);
 
   // Cuộn xuống khi bàn phím hiện, để ô đang nhập không bị che.
   function scrollToBottom() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+  }
+
+  async function requestOtp(nextChallenge: string) {
+    try {
+      const request = await startOtpRequest(nextChallenge);
+      setOtp(request);
+      setOtpPhase("waiting");
+      setUseTotp(request === null);
+    } catch {
+      // Không tạo được yêu cầu duyệt thì vẫn cho nhập mã TOTP
+      setOtp(null);
+      setUseTotp(true);
+    }
   }
 
   async function submitCredentials() {
@@ -57,6 +122,8 @@ export default function LoginScreen({ onSignedIn }: Props) {
       const result = await login(username.trim(), password);
       if (result.kind === "twoFactor") {
         setChallenge(result.challenge);
+        setCode("");
+        await requestOtp(result.challenge);
       } else {
         onSignedIn(result.passwordChangeRequired);
       }
@@ -72,13 +139,31 @@ export default function LoginScreen({ onSignedIn }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const result = await verifyTwoFactor(challenge, code.trim());
+      const result = await verifyTwoFactor(challenge, { code: code.trim() });
       onSignedIn(result.passwordChangeRequired);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xác thực thất bại.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resendOtp() {
+    if (!challenge) return;
+    setError(null);
+    setBusy(true);
+    setOtpPhase("waiting");
+    await requestOtp(challenge);
+    setBusy(false);
+  }
+
+  function backToCredentials() {
+    setChallenge(null);
+    setCode("");
+    setError(null);
+    setOtp(null);
+    setOtpPhase("waiting");
+    setUseTotp(false);
   }
 
   return (
@@ -126,6 +211,40 @@ export default function LoginScreen({ onSignedIn }: Props) {
                 {busy ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Đăng nhập</Text>}
               </Pressable>
             </>
+          ) : otp && !useTotp ? (
+            <>
+              <Text style={styles.hint}>
+                Mở SGU Approve trên điện thoại và chọn đúng số bên dưới rồi bấm Approve.
+              </Text>
+              <View style={styles.otpNumberWrap}>
+                <Text style={styles.otpLabel}>Số đối chiếu</Text>
+                <Text style={styles.otpNumber}>{otp.number}</Text>
+              </View>
+              {otpPhase === "waiting" ? <Text style={styles.hint}>Đang chờ bạn duyệt trên điện thoại...</Text> : null}
+              {otpPhase === "rejected" ? (
+                <Text style={styles.error}>
+                  Yêu cầu đã bị từ chối trên điện thoại. Nếu không phải bạn đăng nhập, hãy đổi mật khẩu ngay.
+                </Text>
+              ) : null}
+              {otpPhase === "expired" && !error ? (
+                <Text style={styles.error}>Yêu cầu đã hết hạn. Hãy gửi lại yêu cầu.</Text>
+              ) : null}
+              {otpPhase !== "waiting" ? (
+                <Pressable
+                  style={({ pressed }) => [styles.button, (busy || pressed) && styles.buttonPressed]}
+                  onPress={resendOtp}
+                  disabled={busy}
+                >
+                  {busy ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Gửi lại yêu cầu</Text>}
+                </Pressable>
+              ) : null}
+              <Pressable onPress={() => setUseTotp(true)} disabled={busy}>
+                <Text style={styles.link}>Không nhận được yêu cầu? Nhập mã 6 số</Text>
+              </Pressable>
+              <Pressable onPress={backToCredentials} disabled={busy}>
+                <Text style={styles.link}>Quay lại</Text>
+              </Pressable>
+            </>
           ) : (
             <>
               <Text style={styles.hint}>
@@ -149,14 +268,12 @@ export default function LoginScreen({ onSignedIn }: Props) {
               >
                 {busy ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Xác nhận</Text>}
               </Pressable>
-              <Pressable
-                onPress={() => {
-                  setChallenge(null);
-                  setCode("");
-                  setError(null);
-                }}
-                disabled={busy}
-              >
+              {otp ? (
+                <Pressable onPress={() => setUseTotp(false)} disabled={busy}>
+                  <Text style={styles.link}>Dùng SGU Approve để duyệt</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={backToCredentials} disabled={busy}>
                 <Text style={styles.link}>Quay lại</Text>
               </Pressable>
             </>
@@ -193,6 +310,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   hint: { fontSize: 14, lineHeight: 20, color: colors.muted },
+  otpNumberWrap: {
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingVertical: 20,
+    backgroundColor: colors.paper,
+  },
+  otpLabel: { fontSize: 14, color: colors.muted },
+  otpNumber: { fontSize: 48, fontWeight: "600", letterSpacing: 8, color: colors.ink },
   field: { gap: 6 },
   label: { fontSize: 14, fontWeight: "600", color: colors.ink },
   input: {

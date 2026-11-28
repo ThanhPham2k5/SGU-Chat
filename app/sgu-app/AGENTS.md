@@ -15,7 +15,7 @@ Use `bunx` instead of `npx` if the project uses bun (`bun.lock` present).
 ```bash
 npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — resolves SDK-compatible versions
 npx expo start              # start the dev server
-npx expo lint               # lint
+npx eslint .                # lint (expo lint không chạy được với ESLint 9)
 npx tsc --noEmit            # typecheck
 npx expo-doctor             # diagnose dependency and config issues
 npx expo install --fix      # fix incompatible package versions
@@ -25,9 +25,9 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
+- App dùng **điều hướng theo state**, không dùng Expo Router. `App.tsx` quyết định màn hình nào hiển thị: đăng nhập, đổi mật khẩu, danh sách chat, phòng chat.
+- Không thêm `expo-router` mà không thống nhất trước. Chuyển sang Expo Router cần cập nhật `package.json` (`main`), `app.json` (plugin, scheme) và cấu trúc `src/app/`.
+- Build Android bị giới hạn đường dẫn 260 ký tự trên Windows. Đừng thêm thư viện native sinh code CMake sâu nếu chưa thử build.
 
 ## Building with EAS
 

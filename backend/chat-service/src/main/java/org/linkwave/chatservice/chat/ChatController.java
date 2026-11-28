@@ -191,8 +191,12 @@ public class ChatController {
 
     @PatchMapping("/{id}/group")
     public void updateGroupChat(@PathVariable String id,
-                                @RequestBody @Valid UpdateGroupChat updateGroupChat) {
-        chatService.updateGroupChat(userDetails().id(), id, updateGroupChat);
+                                @RequestBody @Valid UpdateGroupChat updateGroupChat,
+                                @NonNull HttpServletRequest request) {
+        final RequestInitiator initiator = requestInitiator(request);
+        chatService.updateGroupChat(initiator.userId(), id, updateGroupChat);
+        // phát realtime để thành viên khác cập nhật tên nhóm mà không cần tải lại
+        notifyMembership(id, initiator, "RENAME", null);
     }
 
     @DeleteMapping("/{id}/group")

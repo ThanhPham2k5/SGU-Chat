@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -18,7 +18,11 @@ import {
   MAX_FILE_BYTES,
   MessageDto,
   chatTitle,
+  deleteMessage,
+  editMessageRest,
   fetchMessages,
+  isEditable,
+  isMemberNotice,
   messagePreview,
   sendText,
   uploadFile,
@@ -32,8 +36,12 @@ import {
   isImage,
   messageFileUrl,
   openMessageFile,
-  saveImageToGallery,
 } from "../api/files";
+import { fetchGroupDetails, fetchGroupName } from "../api/groups";
+import ActionSheet, { type ActionItem } from "../components/ActionSheet";
+import GroupInfoModal from "../components/GroupInfoModal";
+import ImageViewer from "../components/ImageViewer";
+import ReportModal from "../components/ReportModal";
 import { formatTime, timeValue } from "../utils/format";
 import { BOTTOM_INSET, TOP_INSET } from "../utils/layout";
 import { colors } from "../theme";
@@ -59,7 +67,9 @@ function errorText(err: unknown, fallback: string): string {
 export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
   // Tin nhắn xếp mới nhất trước, hiển thị ngược để tin mới nằm dưới cùng.
   const [messages, setMessages] = useState<MessageDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Đoạn chat đã tải xong tin nhắn; đổi chat thì đang tải cho đến khi xong.
+  const [loadedChatId, setLoadedChatId] = useState<string | null>(null);
+  const loading = loadedChatId !== chat.id;
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [draft, setDraft] = useState("");
@@ -71,6 +81,20 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
   const [headers, setHeaders] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<MessageDto | null>(null);
+  // Tin đang mở menu thao tác (sửa, thu hồi, báo cáo).
+  const [actionTarget, setActionTarget] = useState<MessageDto | null>(null);
+  // Tin đang sửa: ô nhập hiện nội dung cũ và nút gửi thành "Lưu".
+  const [editing, setEditing] = useState<MessageDto | null>(null);
+  // Quản trị viên nhóm được thu hồi tin của người khác (khớp với web).
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Tên mới sau khi đổi tên nhóm, để hiện ngay mà không cần mở lại đoạn chat.
+  const [titleOverride, setTitleOverride] = useState<string | null>(null);
+
+  const isGroup = chat.type === "GROUP";
+  const isMine = useCallback((m: MessageDto) => myId !== null && m.author?.id === myId, [myId]);
 
   useEffect(() => {
     authHeaders().then(setHeaders).catch(() => {});
@@ -93,19 +117,48 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
         .then((ok) => setDownloaded((prev) => ({ ...prev, [m.id]: ok })))
         .catch(() => {});
     }
-  }, [messages]);
+  }, [messages, downloaded]);
 
-  async function loadPage(offset: number) {
-    const page = await fetchMessages(chat.id, offset, PAGE_SIZE);
-    setMessages((prev) => mergeNewestFirst(prev, page));
-    setHasMore(page.length === PAGE_SIZE);
-  }
+  // Xác định quyền quản trị viên của nhóm để biết có thu hồi được tin của người khác không.
+  useEffect(() => {
+    if (!isGroup || myId === null) return;
+    let active = true;
+    fetchGroupDetails(chat.id)
+      .then((d) => {
+        if (active) setIsAdmin(d.members.some((m) => m.userId === String(myId) && m.isAdmin));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [chat.id, isGroup, myId]);
+
+  const loadPage = useCallback(
+    async (offset: number) => {
+      const page = await fetchMessages(chat.id, offset, PAGE_SIZE);
+      setMessages((prev) => mergeNewestFirst(prev, page));
+      setHasMore(page.length === PAGE_SIZE);
+    },
+    [chat.id],
+  );
 
   useEffect(() => {
-    setLoading(true);
-    loadPage(0)
-      .catch((err) => setError(errorText(err, "Không tải được tin nhắn.")))
-      .finally(() => setLoading(false));
+    let active = true;
+    fetchMessages(chat.id, 0, PAGE_SIZE)
+      .then((page) => {
+        if (!active) return;
+        setMessages((prev) => mergeNewestFirst(prev, page));
+        setHasMore(page.length === PAGE_SIZE);
+      })
+      .catch((err) => {
+        if (active) setError(errorText(err, "Không tải được tin nhắn."));
+      })
+      .finally(() => {
+        if (active) setLoadedChatId(chat.id);
+      });
+    return () => {
+      active = false;
+    };
   }, [chat.id]);
 
   // Nhận tin realtime của đoạn chat này.
@@ -118,7 +171,9 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
           return;
         case "removed":
           if (event.chatId !== chat.id) return;
-          setMessages((prev) => prev.map((m) => (m.id === event.id ? { ...m, removedAt: event.timestamp } : m)));
+          setMessages((prev) =>
+            prev.map((m) => (m.id === event.id ? { ...m, removedAt: event.timestamp, text: null } : m)),
+          );
           return;
         case "updated":
           if (event.chatId !== chat.id) return;
@@ -130,6 +185,15 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
         case "chatDeleted":
           if (event.chatId === chat.id) onBack();
           return;
+        case "renamed":
+          if (event.chatId === chat.id) {
+            fetchGroupName(chat.id)
+              .then((name) => {
+                if (name) setTitleOverride(name);
+              })
+              .catch(() => {});
+          }
+          return;
         case "reconnected":
           loadPage(0).catch(() => {});
           return;
@@ -137,7 +201,7 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
           return;
       }
     });
-  }, [chat.id, onBack]);
+  }, [chat.id, onBack, loadPage]);
 
   async function loadOlder() {
     if (!hasMore || loading || loadingMore) return;
@@ -151,9 +215,47 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
     }
   }
 
+  function startEdit(message: MessageDto) {
+    setEditing(message);
+    setDraft(message.text ?? "");
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setDraft("");
+  }
+
+  async function saveEdit(message: MessageDto, text: string) {
+    if (text === message.text) {
+      cancelEdit();
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      // Qua WebSocket thì server phát UPD_MESSAGE tới cả đoạn chat; chưa kết nối thì gọi REST.
+      if (!chatSocket.editMessage(message.id, text)) {
+        await editMessageRest(message.id, text);
+        setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, text } : m)));
+      }
+      cancelEdit();
+    } catch (err) {
+      setError(errorText(err, "Không sửa được tin nhắn."));
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function send() {
     const text = draft.trim();
     if (!text || sending) return;
+
+    if (editing) {
+      await saveEdit(editing, text);
+      return;
+    }
+
     setError(null);
     setDraft("");
 
@@ -172,6 +274,58 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
     } finally {
       setSending(false);
     }
+  }
+
+  function confirmRecall(message: MessageDto) {
+    Alert.alert(
+      "Thu hồi tin nhắn?",
+      "Tin nhắn sẽ hiện là đã thu hồi với mọi thành viên trong đoạn chat.",
+      [
+        { text: "Huỷ", style: "cancel" },
+        { text: "Thu hồi", style: "destructive", onPress: () => recall(message) },
+      ],
+    );
+  }
+
+  async function recall(message: MessageDto) {
+    setError(null);
+    try {
+      // Qua WebSocket thì server phát REMOVE tới cả đoạn chat; chưa kết nối thì gọi REST.
+      if (!chatSocket.removeMessage(message.id)) {
+        await deleteMessage(message.id);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === message.id ? { ...m, removedAt: new Date().toISOString(), text: null } : m)),
+        );
+      }
+      if (editing?.id === message.id) cancelEdit();
+    } catch (err) {
+      setError(errorText(err, "Không thu hồi được tin nhắn."));
+    }
+  }
+
+  // Giữ lâu một tin: tin của mình có menu sửa/thu hồi; tin người khác báo cáo, quản trị viên có thêm thu hồi.
+  function openMenu(message: MessageDto) {
+    if (message.removedAt) return;
+    if (!isMine(message) && !isAdmin) {
+      setReportTarget(message);
+      return;
+    }
+    setActionTarget(message);
+  }
+
+  function actionsFor(message: MessageDto): ActionItem[] {
+    const items: ActionItem[] = [];
+    const mine = isMine(message);
+    if (mine && isEditable(message)) {
+      items.push({ label: "Sửa tin nhắn", onPress: () => startEdit(message) });
+    }
+    if (mine || isAdmin) {
+      items.push({ label: "Thu hồi tin nhắn", destructive: true, onPress: () => confirmRecall(message) });
+    }
+    if (!mine) {
+      items.push({ label: "Báo cáo tin nhắn", onPress: () => setReportTarget(message) });
+    }
+    return items;
   }
 
   async function attach() {
@@ -243,7 +397,6 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
     }
   }
 
-  const isGroup = chat.type === "GROUP";
   const subtitle = isGroup ? "Nhóm" : chat.user?.online ? "Đang hoạt động" : "Ngoại tuyến";
   const uploading = uploadProgress !== null;
 
@@ -255,10 +408,13 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
         </Pressable>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {chatTitle(chat)}
+            {titleOverride ?? chatTitle(chat)}
           </Text>
           <Text style={styles.headerSub}>{subtitle}</Text>
         </View>
+        <Pressable onPress={() => setInfoOpen(true)} hitSlop={12} style={styles.moreButton}>
+          <Text style={styles.moreText}>⋮</Text>
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView style={styles.body} behavior="padding">
@@ -274,15 +430,18 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
             onEndReached={loadOlder}
             onEndReachedThreshold={0.3}
             ListFooterComponent={
-              loadingMore ? <ActivityIndicator style={styles.footer} color={colors.primary} /> : null
+              loadingMore ? <ActivityIndicator style={styles.footer} color={colors.primary} /> : undefined
             }
             ListEmptyComponent={<Text style={styles.empty}>Chưa có tin nhắn nào.</Text>}
             renderItem={({ item }) => {
-              const mine = myId !== null && item.author?.id === myId;
+              // Tin hệ thống (người tham gia, rời nhóm) hiển thị ở giữa, không có bong bóng.
+              if (isMemberNotice(item)) {
+                return <Text style={styles.system}>{messagePreview(item)}</Text>;
+              }
               return (
                 <Bubble
                   message={item}
-                  mine={mine}
+                  mine={isMine(item)}
                   showAuthor={isGroup}
                   headers={headers}
                   busy={busyId === item.id}
@@ -290,6 +449,7 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
                   onView={() => setViewing(item)}
                   onDownload={() => download(item)}
                   onOpen={() => open(item)}
+                  onLongPress={() => openMenu(item)}
                 />
               );
             }}
@@ -297,12 +457,24 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
         )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+        {editing ? (
+          <View style={styles.editBar}>
+            <Text style={styles.editText} numberOfLines={1}>
+              Đang sửa: {editing.text}
+            </Text>
+            <Pressable onPress={cancelEdit} hitSlop={8} disabled={sending}>
+              <Text style={styles.editCancel}>Huỷ</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={[styles.inputRow, { paddingBottom: keyboardOpen ? 8 : BOTTOM_INSET }]}>
           <Pressable
             style={({ pressed }) => [styles.attachButton, (uploading || pressed) && styles.attachPressed]}
             onPress={attach}
-            disabled={uploading}
+            disabled={uploading || editing !== null}
           >
             <Text style={styles.attachText}>{uploading ? uploadProgress : "Tệp"}</Text>
           </Pressable>
@@ -326,65 +498,53 @@ export default function ChatRoomScreen({ chat, myId, onBack }: Props) {
             onPress={send}
             disabled={!draft.trim() || sending}
           >
-            {sending ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.sendText}>Gửi</Text>}
+            {sending ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={styles.sendText}>{editing ? "Lưu" : "Gửi"}</Text>
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>
 
-      {viewing ? <ImageViewer message={viewing} headers={headers} onClose={() => setViewing(null)} /> : null}
+      {viewing ? (
+        <ImageViewer
+          messageId={viewing.id}
+          filename={viewing.filename ?? "image.jpg"}
+          headers={headers}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
+
+      {actionTarget ? (
+        <ActionSheet
+          title={messagePreview(actionTarget)}
+          actions={actionsFor(actionTarget)}
+          onClose={() => setActionTarget(null)}
+        />
+      ) : null}
+
+      {infoOpen ? (
+        <GroupInfoModal
+          chat={chat}
+          myId={myId}
+          onRenamed={(name) => setTitleOverride(name)}
+          onLeft={onBack}
+          onClose={() => setInfoOpen(false)}
+        />
+      ) : null}
+
+      {reportTarget ? (
+        <ReportModal
+          messageId={reportTarget.id}
+          onDone={(message) => {
+            setReportTarget(null);
+            setNotice(message);
+          }}
+          onClose={() => setReportTarget(null)}
+        />
+      ) : null}
     </View>
-  );
-}
-
-function ImageViewer({
-  message,
-  headers,
-  onClose,
-}: {
-  message: MessageDto;
-  headers: Record<string, string>;
-  onClose: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-    setNotice(null);
-    try {
-      await saveImageToGallery(message.id, message.filename ?? "image.jpg");
-      setNotice("Đã lưu vào bộ sưu tập.");
-    } catch (err) {
-      setNotice(errorText(err, "Không lưu được ảnh."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.viewer}>
-        <View style={[styles.viewerBar, { paddingTop: TOP_INSET + 8 }]}>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.viewerClose}>Đóng</Text>
-          </Pressable>
-          <Pressable onPress={save} disabled={saving} hitSlop={12}>
-            {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.viewerAction}>Tải về</Text>}
-          </Pressable>
-        </View>
-
-        <View style={styles.viewerBody}>
-          <Image
-            source={{ uri: messageFileUrl(message.id), headers }}
-            style={styles.viewerImage}
-            resizeMode="contain"
-          />
-        </View>
-
-        {notice ? <Text style={[styles.viewerNotice, { paddingBottom: BOTTOM_INSET }]}>{notice}</Text> : null}
-      </View>
-    </Modal>
   );
 }
 
@@ -398,6 +558,7 @@ function Bubble({
   onView,
   onDownload,
   onOpen,
+  onLongPress,
 }: {
   message: MessageDto;
   mine: boolean;
@@ -408,6 +569,7 @@ function Bubble({
   onView: () => void;
   onDownload: () => void;
   onOpen: () => void;
+  onLongPress: () => void;
 }) {
   const author = message.author;
   const removed = !!message.removedAt;
@@ -433,7 +595,11 @@ function Bubble({
   }
 
   return (
-    <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
+    <Pressable
+      onLongPress={removed ? undefined : onLongPress}
+      delayLongPress={400}
+      style={[styles.bubbleRow, mine && styles.bubbleRowMine]}
+    >
       <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
         {showAuthor && !mine && author ? (
           <Text style={styles.author}>{author.name || author.username}</Text>
@@ -459,7 +625,7 @@ function Bubble({
 
         <Text style={styles.time}>{formatTime(message.createdAt)}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -479,11 +645,14 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerTitle: { fontSize: 16, fontWeight: "600", color: colors.ink },
   headerSub: { fontSize: 12, color: colors.muted },
+  moreButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  moreText: { fontSize: 22, fontWeight: "700", color: colors.primary },
   body: { flex: 1, backgroundColor: colors.paper },
   loader: { marginTop: 40 },
   footer: { paddingVertical: 12 },
   listContent: { paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
   empty: { textAlign: "center", color: colors.muted, padding: 24 },
+  system: { textAlign: "center", fontSize: 12, color: colors.muted, paddingVertical: 2 },
   bubbleRow: { flexDirection: "row", justifyContent: "flex-start" },
   bubbleRowMine: { justifyContent: "flex-end" },
   bubble: { maxWidth: "80%", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
@@ -500,6 +669,18 @@ const styles = StyleSheet.create({
   fileAction: { fontSize: 14, fontWeight: "600", color: colors.primary },
   time: { fontSize: 12, color: colors.muted, textAlign: "right", fontVariant: ["tabular-nums"] },
   error: { color: colors.danger, fontSize: 14, paddingHorizontal: 16, paddingVertical: 6 },
+  notice: { color: colors.primary, fontSize: 14, paddingHorizontal: 16, paddingVertical: 6 },
+  editBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.tint,
+  },
+  editText: { flex: 1, fontSize: 13, color: colors.ink },
+  editCancel: { fontSize: 14, fontWeight: "600", color: colors.primary },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -547,17 +728,4 @@ const styles = StyleSheet.create({
   sendDisabled: { opacity: 0.45 },
   sendPressed: { backgroundColor: colors.primaryHover },
   sendText: { color: colors.surface, fontSize: 15, fontWeight: "600" },
-  viewer: { flex: 1, backgroundColor: "#000000" },
-  viewerBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  viewerClose: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
-  viewerAction: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
-  viewerBody: { flex: 1 },
-  viewerImage: { width: "100%", height: "100%" },
-  viewerNotice: { color: "#ffffff", textAlign: "center", fontSize: 14, paddingHorizontal: 16 },
 });
